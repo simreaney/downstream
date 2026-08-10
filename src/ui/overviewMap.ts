@@ -105,6 +105,7 @@ const MARKUP = `
       <div class="overview__description" id="overview-description"></div>
       <div class="overview__canvas-wrap">
         <canvas id="overview-canvas"></canvas>
+        <div class="overview__nodes" id="overview-nodes"></div>
         <div class="overview__marker overview__marker--outlet" id="overview-outlet" title="Outlet"></div>
         <div class="overview__marker overview__marker--player" id="overview-player">
           <svg viewBox="0 0 10 10" width="16" height="16" overflow="visible">
@@ -113,16 +114,44 @@ const MARKUP = `
         </div>
       </div>
       <div class="overview__ramp" id="overview-ramp" hidden></div>
+      <div class="overview__key">
+        <span><i class="overview__swatch overview__swatch--wood"></i>wood</span>
+        <span><i class="overview__swatch overview__swatch--stone"></i>stone</span>
+        <span><i class="overview__swatch overview__swatch--spade"></i>spade</span>
+        <span><i class="overview__swatch overview__swatch--outlet"></i>outlet</span>
+      </div>
       <div class="overview__hint"><kbd>Tab</kbd> close &middot; <kbd>M</kbd> next layer &middot; <kbd>N</kbd> off</div>
     </div>
   </div>
 `;
+
+/**
+ * A gatherable, as the map needs it.
+ *
+ * Structural rather than importing `ResourceNode`, so the map stays a view over
+ * grid data and does not acquire an opinion about the resource system.
+ */
+export interface MappedNode {
+  readonly id: number;
+  readonly kind: string;
+  readonly position: { readonly x: number; readonly z: number };
+}
 
 export interface OverviewMap {
   readonly visible: boolean;
   toggle(): void;
   show(): void;
   hide(): void;
+  /**
+   * Show where the uncollected gatherables are.
+   *
+   * The map is the answer to "where is the wood": a log pile is a metre tall
+   * and stands among seven-metre trees, so scanning a hillside for one is
+   * hopeless in the 3D view however many of them there are.
+   */
+  setResources(nodes: readonly MappedNode[]): void;
+  /** Drop a node's marker once it has been picked up. */
+  clearResource(id: number): void;
   /** Adopt a freshly recomputed overlay buffer, same as the terrain gets. */
   setOverlay(rgba: Uint8Array): void;
   /** Overlay opacity, kept in lockstep with `overlayControl`'s fade. */
@@ -202,6 +231,9 @@ export function createOverviewMap(
     (outletRow + 0.5) * spec.cellSize - halfHeight,
   );
 
+  const nodeLayer = root.querySelector("#overview-nodes") as HTMLElement;
+  const nodeMarkers = new Map<number, HTMLElement>();
+
   const api: OverviewMap = {
     get visible() {
       return visible;
@@ -221,6 +253,27 @@ export function createOverviewMap(
     hide() {
       visible = false;
       panel.hidden = true;
+    },
+
+    setResources(nodes) {
+      // Built into a fragment and attached once: a hundred and fifty markers
+      // appended one at a time is a hundred and fifty layout passes on a panel
+      // the player is waiting to see.
+      const fragment = document.createDocumentFragment();
+      nodeMarkers.clear();
+      for (const node of nodes) {
+        const marker = document.createElement("div");
+        marker.className = `overview__node overview__node--${node.kind}`;
+        place(marker, node.position.x, node.position.z);
+        nodeMarkers.set(node.id, marker);
+        fragment.appendChild(marker);
+      }
+      nodeLayer.replaceChildren(fragment);
+    },
+
+    clearResource(id) {
+      nodeMarkers.get(id)?.remove();
+      nodeMarkers.delete(id);
     },
 
     setOverlay(rgba) {

@@ -15,32 +15,56 @@ const CUT_END = 0xc9a878;
 const HANDLE = 0x7a5a38;
 const BLADE = 0xb9c2c7;
 
-/** A short stack of cut logs — the wood pickup. */
+/**
+ * A stack of cut logs, with two leaning against it — the wood pickup.
+ *
+ * Sized against what it has to compete with rather than against itself. A stack
+ * a metre wide and knee high is a correct woodpile and was invisible in play:
+ * it sits *inside* woodland, where the things around it are seven metres tall,
+ * so from any distance worth scanning from it was a brown speck under a canopy.
+ * The leaning pair is the cheap half of the fix — height reads at distance where
+ * bulk does not, and two uprights break the horizontal line of everything else
+ * on the forest floor.
+ */
 export function logPile(context: PropContext): PropAsset {
   const logs: THREE.BufferGeometry[] = [];
   const ends: THREE.BufferGeometry[] = [];
 
+  const length = 1.9;
+  const radius = 0.3;
+
   // Two on the bottom, one nested on top: the way timber actually stacks, and
   // enough asymmetry that it does not read as a machined block.
   const layout: [number, number, number][] = [
-    [-0.26, 0.24, 0],
-    [0.26, 0.24, 0],
-    [0, 0.68, 0.04],
+    [-0.32, 0.3, 0],
+    [0.32, 0.3, 0],
+    [0, 0.85, 0.05],
   ];
 
   for (const [x, y, z] of layout) {
-    const log = new THREE.CylinderGeometry(0.24, 0.24, 1.5, 8);
+    const log = new THREE.CylinderGeometry(radius, radius, length, 8);
     log.rotateZ(Math.PI / 2);
     log.translate(x, y, z);
     logs.push(log);
 
     // Pale cut ends, so the pile reads as felled timber rather than as branches.
     for (const side of [-1, 1]) {
-      const end = new THREE.CylinderGeometry(0.245, 0.245, 0.06, 8);
+      const end = new THREE.CylinderGeometry(radius + 0.005, radius + 0.005, 0.06, 8);
       end.rotateZ(Math.PI / 2);
-      end.translate(x + side * 0.75, y, z);
+      end.translate(x + side * (length / 2), y, z);
       ends.push(end);
     }
+  }
+
+  // Two leaning against the stack, tilted out of plane so the silhouette is not
+  // symmetrical from every angle.
+  for (const [tilt, offset] of [[0.42, -0.55], [-0.34, 0.62]] as const) {
+    const leaning = new THREE.CylinderGeometry(radius * 0.8, radius * 0.85, 2.3, 7);
+    leaning.translate(0, 1.15, 0);
+    leaning.rotateX(tilt * 0.5);
+    leaning.rotateZ(tilt);
+    leaning.translate(offset, 0.1, offset * 0.35);
+    logs.push(leaning);
   }
 
   return {
@@ -48,8 +72,8 @@ export function logPile(context: PropContext): PropAsset {
       part(merge(logs), context.material(TIMBER)),
       part(merge(ends), context.material(CUT_END)),
     ],
-    radius: 0.9,
-    height: 0.95,
+    radius: 1.1,
+    height: 2.2,
   };
 }
 

@@ -32,6 +32,23 @@ const TURN_TAU = 0.06;
  */
 export const MAX_WALK_SLOPE_DEG = 31;
 
+/**
+ * Radius of the player's own footprint, in metres.
+ *
+ * Added to every obstacle's radius so the character stops with their shoulder
+ * against a wall rather than with their centre on it, which at this camera
+ * distance is the difference between standing beside a cottage and standing
+ * half inside one.
+ */
+const PLAYER_RADIUS_M = 0.45;
+
+/** A solid circular footprint in the ground plane. */
+export interface Obstacle {
+  readonly x: number;
+  readonly z: number;
+  readonly radius: number;
+}
+
 export interface Player {
   readonly position: THREE.Vector3;
   /** Facing, in radians about Y. */
@@ -41,10 +58,53 @@ export interface Player {
   update(input: InputState, cameraYaw: number, dt: number): void;
 }
 
+/**
+ * Push a candidate position out of anything solid it has ended up inside.
+ *
+ * Projecting back onto the circle's edge rather than refusing the step, so that
+ * walking into a wall at an angle slides along it. Refusing outright would stop
+ * the player dead against a cottage they were only brushing past, which reads
+ * as the controls sticking.
+ *
+ * Resolved against every obstacle in turn, and the order is not significant
+ * here because buildings are sited far enough apart that their footprints do
+ * not overlap — if they ever do, a corner between two of them would need a
+ * second pass to settle.
+ */
+function pushOut(
+  obstacles: readonly Obstacle[],
+  x: number,
+  z: number,
+  out: { x: number; z: number },
+): void {
+  out.x = x;
+  out.z = z;
+
+  for (const obstacle of obstacles) {
+    const reach = obstacle.radius + PLAYER_RADIUS_M;
+    const dx = out.x - obstacle.x;
+    const dz = out.z - obstacle.z;
+    const distanceSq = dx * dx + dz * dz;
+    if (distanceSq >= reach * reach) continue;
+
+    // Dead centre has no direction to be pushed in. Only reachable by starting
+    // inside a footprint, so any consistent choice will do.
+    if (distanceSq < 1e-8) {
+      out.x = obstacle.x + reach;
+      continue;
+    }
+
+    const distance = Math.sqrt(distanceSq);
+    out.x = obstacle.x + (dx / distance) * reach;
+    out.z = obstacle.z + (dz / distance) * reach;
+  }
+}
+
 export function createPlayer(
   dem: Float32Array,
   spec: GridSpec,
   start: THREE.Vector3,
+  obstacles: readonly Obstacle[] = [],
 ): Player {
   const position = start.clone();
   position.y = sampleHeight(dem, spec, position.x, position.z);
@@ -54,6 +114,7 @@ export function createPlayer(
 
   const desired = new THREE.Vector3();
   const normal = new THREE.Vector3();
+  const resolved = { x: 0, z: 0 };
   const halfExtentX = (spec.width * spec.cellSize) / 2 - spec.cellSize;
   const halfExtentZ = (spec.height * spec.cellSize) / 2 - spec.cellSize;
 
@@ -108,8 +169,13 @@ export function createPlayer(
       // the foot of a cliff instead of walking onto it and sliding.
       sampleNormal(dem, spec, nextX, nextZ, normal);
       if (normal.y >= cosMaxSlope) {
-        position.x = nextX;
-        position.z = nextZ;
+        // The edge clamp still runs after the push-out, which in principle
+        // could put the player back inside something. It cannot in practice:
+        // buildings are sited on the valley floor, and the clamp only bites
+        // within a cell of the catchment boundary.
+        pushOut(obstacles, nextX, nextZ, resolved);
+        position.x = THREE.MathUtils.clamp(resolved.x, -halfExtentX, halfExtentX);
+        position.z = THREE.MathUtils.clamp(resolved.z, -halfExtentZ, halfExtentZ);
       } else {
         speed *= 0.4;
       }

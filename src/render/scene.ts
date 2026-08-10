@@ -10,6 +10,7 @@
 import * as THREE from "three";
 import { GRID } from "../config";
 import type { GridSpec } from "../core/grid";
+import type { Obstacle } from "../player/controller";
 import { createCharacter, type Character } from "../props/character";
 import { getProp } from "../props/registry";
 import { createPropContext, type PropContext } from "../props/types";
@@ -52,6 +53,8 @@ export interface WorldScene {
   readonly fish: InstancedBatch;
   /** The layers placement validation reads, kept on the main thread. */
   readonly arrays: GeneratedWorld["arrays"];
+  /** Solid footprints the player cannot walk through. */
+  readonly obstacles: readonly Obstacle[];
   /**
    * Elevation as *drawn*, which diverges from the model's DEM once ponds are
    * dug. Excavating a bowl is a visual change only: ponds deliberately stay out
@@ -83,6 +86,7 @@ export function buildWorldScene(
     overlay: overlayTexture,
     gradientMap,
     curvature,
+    spec,
   });
 
   const renderDem = Float32Array.from(world.arrays.dem);
@@ -139,6 +143,12 @@ export function buildWorldScene(
   const settlements = new THREE.Group();
   scene.add(settlements);
 
+  // A building is solid. Collected here rather than derived later because this
+  // is the only place that knows where each one ended up, and a second pass
+  // over `settlements` would have to re-derive a footprint from meshes that
+  // have already been rotated into place.
+  const obstacles: Obstacle[] = [];
+
   const place = (id: Parameters<typeof getProp>[0], cell: number, rotation: number): void => {
     const asset = getProp(id, props);
     const group = new THREE.Group();
@@ -152,6 +162,13 @@ export function buildWorldScene(
     group.position.y = world.arrays.dem[cell];
     group.rotation.y = rotation;
     settlements.add(group);
+
+    // The prop's own radius is its half-width, which for a gabled box is the
+    // short way across. A circle on that radius would let the player walk
+    // through the corners of a cottage, so the footprint is grown to cover the
+    // longer axis — a little generous at the corners, which reads as not quite
+    // being able to scrape the wall rather than as a bug.
+    obstacles.push({ x: group.position.x, z: group.position.z, radius: asset.radius * 1.35 });
   };
 
   world.sites.cottageCells.forEach((cell, index) => {
@@ -198,6 +215,7 @@ export function buildWorldScene(
     flood,
     fish: fishBatch,
     arrays: world.arrays,
+    obstacles,
     renderDem,
     pickups,
 

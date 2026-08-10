@@ -4,9 +4,11 @@
  * Two things here are easy to get wrong and invisible in code review.
  *
  * The risk-to-vertex mapping depends on this mesh iterating reaches in exactly
- * the order the worker emits risk for, with two vertices per cell. Drift and the
- * river shows one reach's sediment on another — a plausible-looking picture of
- * the wrong thing.
+ * the order the worker emits risk for, and on each cross-section knowing where
+ * it sits in that array. The ribbon is subdivided finer than the grid, so the
+ * mapping is a fractional cell coordinate rather than a one-to-one index; drift
+ * and the river shows one reach's sediment on another — a plausible-looking
+ * picture of the wrong thing.
  *
  * Triangle winding decides which way the surface faces. Because the water
  * material is double-sided, a reversed winding does not produce an invisible
@@ -18,7 +20,7 @@
 import { describe, expect, it } from "vitest";
 import * as THREE from "three";
 import type { GridSpec } from "../../src/core/grid";
-import { createRiverMesh } from "../../src/render/riverMesh";
+import { createRiverMesh, SAMPLES_PER_CELL } from "../../src/render/riverMesh";
 import type { ReachDto } from "../../src/worker/protocol";
 
 const SPEC: GridSpec = { width: 16, height: 16, cellSize: 4 };
@@ -42,24 +44,75 @@ function build(reaches: ReachDto[]) {
   return createRiverMesh(reaches, dem, SPEC, SPEC.width * SPEC.height, material);
 }
 
+/** Cross-sections a reach of `cells` cells is subdivided into. */
+function sectionsIn(cells: number): number {
+  return (cells - 1) * SAMPLES_PER_CELL + 1;
+}
+
 describe("createRiverMesh", () => {
-  it("emits two vertices per channel cell, across every reach", () => {
+  it("subdivides each reach, emitting two vertices per cross-section", () => {
     const river = build([reach(1, 5), reach(8, 4)]);
     const position = river.mesh.geometry.getAttribute("position");
-    expect(position.count).toBe((5 + 4) * 2);
+    expect(position.count).toBe((sectionsIn(5) + sectionsIn(4)) * 2);
   });
 
-  it("maps each risk value onto both vertices of its cell, in reach order", () => {
+  it("lands a cross-section exactly on each cell, in reach order", () => {
     const river = build([reach(1, 3), reach(8, 2)]);
 
     const risk = Float32Array.from([0.1, 0.2, 0.3, 0.8, 0.9]);
     river.setReachRisk(risk);
 
+    const actual = river.mesh.geometry.getAttribute("aReachRisk").array as Float32Array;
+
+    // Cell `i` of the first reach owns cross-section `i * SAMPLES_PER_CELL`; the
+    // second reach starts after the first reach's sections. Both vertices of a
+    // section carry the value, so a section is two entries wide.
+    const sectionOf = (reachStart: number, cell: number): number =>
+      reachStart + cell * SAMPLES_PER_CELL;
+    const secondReach = sectionsIn(3);
+
+    const expected: Array<[number, number]> = [
+      [sectionOf(0, 0), 0.1],
+      [sectionOf(0, 1), 0.2],
+      [sectionOf(0, 2), 0.3],
+      [sectionOf(secondReach, 0), 0.8],
+      [sectionOf(secondReach, 1), 0.9],
+    ];
+
     // Compared with a tolerance because the attribute is Float32.
-    const actual = Array.from(river.mesh.geometry.getAttribute("aReachRisk").array as Float32Array);
-    const expected = [0.1, 0.1, 0.2, 0.2, 0.3, 0.3, 0.8, 0.8, 0.9, 0.9];
-    expect(actual).toHaveLength(expected.length);
-    actual.forEach((value, i) => expect(value).toBeCloseTo(expected[i], 6));
+    for (const [section, value] of expected) {
+      expect(actual[section * 2]).toBeCloseTo(value, 6);
+      expect(actual[section * 2 + 1]).toBeCloseTo(value, 6);
+    }
+  });
+
+  it("interpolates risk between cells rather than stepping at the boundary", () => {
+    const river = build([reach(1, 3)]);
+    river.setReachRisk(Float32Array.from([0, 1, 1]));
+
+    const actual = river.mesh.geometry.getAttribute("aReachRisk").array as Float32Array;
+
+    // Halfway between the first two cells is halfway between their risks, and
+    // every section along that span is strictly increasing.
+    const half = SAMPLES_PER_CELL / 2;
+    expect(actual[half * 2]).toBeCloseTo(0.5, 6);
+    for (let section = 1; section <= SAMPLES_PER_CELL; section++) {
+      expect(actual[section * 2]).toBeGreaterThan(actual[(section - 1) * 2]);
+    }
+  });
+
+  it("keeps a reach's risk out of the next one", () => {
+    // The offset into the risk array must advance by every reach the worker
+    // traced, including one too short to draw — the worker emits a value for
+    // its cell either way.
+    const short: ReachDto = { cells: Int32Array.of(4 * SPEC.width + 8), accum: Float64Array.of(5) };
+    const river = build([short, reach(8, 2)]);
+
+    river.setReachRisk(Float32Array.from([0.4, 0.8, 0.9]));
+
+    const actual = river.mesh.geometry.getAttribute("aReachRisk").array as Float32Array;
+    expect(actual[0]).toBeCloseTo(0.8, 6);
+    expect(actual[(sectionsIn(2) - 1) * 2]).toBeCloseTo(0.9, 6);
   });
 
   it("winds triangles so the surface faces up", () => {
@@ -93,16 +146,20 @@ describe("createRiverMesh", () => {
     const river = build([reach(1, 8)]);
     const position = river.mesh.geometry.getAttribute("position") as THREE.BufferAttribute;
 
-    const halfWidthAt = (cell: number): number => {
-      const left = new THREE.Vector3().fromBufferAttribute(position, cell * 2);
-      const right = new THREE.Vector3().fromBufferAttribute(position, cell * 2 + 1);
+    const halfWidthAt = (section: number): number => {
+      const left = new THREE.Vector3().fromBufferAttribute(position, section * 2);
+      const right = new THREE.Vector3().fromBufferAttribute(position, section * 2 + 1);
       return left.distanceTo(right) / 2;
     };
 
-    expect(halfWidthAt(7)).toBeGreaterThan(halfWidthAt(0));
-    for (let cell = 0; cell < 8; cell++) {
-      expect(halfWidthAt(cell)).toBeGreaterThanOrEqual(0.7 - 1e-6);
-      expect(halfWidthAt(cell)).toBeLessThanOrEqual(2.6 + 1e-6);
+    const sections = sectionsIn(8);
+    expect(halfWidthAt(sections - 1)).toBeGreaterThan(halfWidthAt(0));
+    // Every cross-section, not only the ones on a cell centre: widths are
+    // interpolated between cells, and an interpolation that overshot would put
+    // the ribbon outside the hydraulic geometry it is supposed to be drawing.
+    for (let section = 0; section < sections; section++) {
+      expect(halfWidthAt(section)).toBeGreaterThanOrEqual(0.7 - 1e-6);
+      expect(halfWidthAt(section)).toBeLessThanOrEqual(2.6 + 1e-6);
     }
   });
 

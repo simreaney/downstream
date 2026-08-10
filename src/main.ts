@@ -102,7 +102,7 @@ async function boot(): Promise<void> {
   outletPosition.y = world.arrays.dem[world.outlet];
   const start = outletPosition.clone().multiplyScalar(0.72);
 
-  const player = createPlayer(world.arrays.dem, GRID, start);
+  const player = createPlayer(world.arrays.dem, GRID, start, scene.obstacles);
   const input = createInput(canvas);
   const camera = createFollowCamera(
     renderer.camera,
@@ -165,6 +165,7 @@ async function boot(): Promise<void> {
       batch.add(node.position, ((node.id * 2.399) % (Math.PI * 2)), node.kind === "spade" ? 1 : 0.9),
     );
   }
+  overviewMap.setResources(resources.nodes);
 
   const audio = createAudio();
   // A restored save means a returning player; the opening lesson would be noise.
@@ -234,6 +235,7 @@ async function boot(): Promise<void> {
         scene.pickups[node.kind].remove(handle);
         markerHandles.delete(node.id);
       }
+      overviewMap.clearResource(node.id);
     }
     await build.replay(restored.interventions);
     hud.toast(`Restored — ${restored.interventions.length} features`);
@@ -399,6 +401,7 @@ async function boot(): Promise<void> {
         scene.pickups[node.kind].remove(handle);
         markerHandles.delete(node.id);
       }
+      overviewMap.clearResource(node.id);
       audio.play("gather");
       tutorial.complete("gather");
       if (node.kind === "wood") {
@@ -485,7 +488,8 @@ async function boot(): Promise<void> {
   console.info(
     `catchment ${seed}: outlet ${world.outlet}, ${world.reaches.length} reaches, ` +
       `mean source risk ${world.metrics.meanSourceRisk.toFixed(4)}, ` +
-      `${resources.nodes.length} resource nodes`,
+      `${resources.nodes.length} resource nodes, ` +
+      `${scene.obstacles.length} solid buildings`,
   );
 
   renderer.start();

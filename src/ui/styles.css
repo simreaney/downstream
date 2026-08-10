@@ -531,6 +531,74 @@ kbd {
   filter: drop-shadow(0 0 2px rgba(0, 0, 0, 0.5));
 }
 
+/* Gatherables. Smaller than the outlet and player markers on purpose: there are
+   over a hundred of them, and at the outlet's weight they would read as the
+   subject of the map rather than as an answer to "where do I get wood". */
+.overview__nodes {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.overview__node {
+  position: absolute;
+  width: 0.4rem;
+  height: 0.4rem;
+  border-radius: 50%;
+  transform: translate(-50%, -50%);
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.85);
+}
+
+.overview__node--wood,
+.overview__swatch--wood {
+  background: #8a6236;
+}
+
+.overview__node--stone,
+.overview__swatch--stone {
+  background: #9aa3a8;
+}
+
+/* The spade is one-of-a-kind, so it gets the size the others gave up. Gold
+   rather than the blue it started as: blue is the outlet's colour, and two
+   single blue dots on one map read as a pair of related things. */
+.overview__node--spade,
+.overview__swatch--spade {
+  background: #e5a12f;
+}
+
+.overview__node--spade {
+  width: 0.62rem;
+  height: 0.62rem;
+  box-shadow: 0 0 0 1.5px var(--paper), 0 0 4px rgba(0, 0, 0, 0.45);
+}
+
+.overview__key {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.1rem 0.85rem;
+  margin-top: 0.5rem;
+  font-size: 0.72rem;
+  opacity: 0.75;
+}
+
+.overview__key span {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+}
+
+.overview__swatch {
+  width: 0.5rem;
+  height: 0.5rem;
+  border-radius: 50%;
+  box-shadow: 0 0 0 1px rgba(61, 50, 38, 0.35);
+}
+
+.overview__swatch--outlet {
+  background: var(--water);
+}
+
 .overview__ramp {
   height: 0.55rem;
   margin-top: 0.6rem;

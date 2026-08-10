@@ -19,6 +19,55 @@ import { LandCover } from "../scimap/constants";
 import { applyCurvature, type CurvatureUniforms } from "./curvature";
 
 /**
+ * Wavelengths of the three octaves of ground detail, in metres.
+ *
+ * Chosen around the 4 m cell rather than arbitrarily. The mottle is far coarser
+ * than a cell, so it reads as damp ground and worn patches drifting across a
+ * field without ever looking like data. The grain and the tooth are finer than a
+ * cell, which is the point: nearest filtering magnifies a cell into a flat
+ * 4 m square of colour, and standing on one is where the ground looks most like
+ * painted cardboard. Detail below the cell size breaks that up close without
+ * touching what the map says.
+ */
+const MOTTLE_M = 34;
+const GRAIN_M = 2.6;
+const TOOTH_M = 0.85;
+
+/**
+ * Brightness swing of each octave, as a fraction.
+ *
+ * These are peak-to-peak on noise whose standard deviation is about 0.21, so the
+ * variation the eye actually gets is nearer a fifth of the number written here.
+ * The first pass at this used a third of these values on the reasoning that
+ * subtle was safer, and the ground came back indistinguishable from flat colour
+ * in a screenshot.
+ */
+const MOTTLE_STRENGTH = 0.15;
+const GRAIN_STRENGTH = 0.24;
+const TOOTH_STRENGTH = 0.17;
+
+/**
+ * Distances over which the two fine octaves fade out, in metres.
+ *
+ * They are procedural, so there is no mip chain to filter them: past the point
+ * where a wavelength falls below a pixel they alias, and the aliasing crawls as
+ * the player walks. Fading them leaves the mottle — which is coarse enough to
+ * survive — doing the work at distance, which is also where the crisp cell edges
+ * are meant to read as a data product.
+ */
+const DETAIL_NEAR_M = 45;
+const DETAIL_FAR_M = 170;
+
+/**
+ * How hard the darker half of the detail warms towards bare soil.
+ *
+ * A gain on a swing that only ever reaches about 0.16, so it takes a number
+ * well above 1 to be visible at all; 4 saturates the tint in the deepest
+ * hollows and leaves most of the ground barely touched.
+ */
+const SOIL_TINT_GAIN = 4;
+
+/**
  * Warm, saturated, low-contrast — the Animal Crossing palette.
  *
  * Arable is the odd one out and deliberately so: it is drawn as tilled earth
@@ -118,6 +167,8 @@ export interface TerrainMaterialOptions {
   readonly overlay: THREE.Texture;
   readonly gradientMap: THREE.Texture;
   readonly curvature: CurvatureUniforms;
+  /** The grid the textures are on, so detail can be sized in metres. */
+  readonly spec: GridSpec;
 }
 
 export function createTerrainMaterial(options: TerrainMaterialOptions): TerrainMaterial {
@@ -129,6 +180,10 @@ export function createTerrainMaterial(options: TerrainMaterialOptions): TerrainM
     gradientMap: options.gradientMap,
   });
 
+  // `vMapUv` runs 0..1 across the catchment, so this converts it to metres and
+  // every wavelength above can be written as the distance it actually is.
+  const extentM = options.spec.width * options.spec.cellSize;
+
   material.onBeforeCompile = (shader) => {
     shader.uniforms.uOverlay = uOverlay;
     shader.uniforms.uOverlayMix = uOverlayMix;
@@ -138,14 +193,70 @@ export function createTerrainMaterial(options: TerrainMaterialOptions): TerrainM
         "#include <common>",
         /* glsl */ `#include <common>
         uniform sampler2D uOverlay;
-        uniform float uOverlayMix;`,
+        uniform float uOverlayMix;
+
+        // Value noise, hashed rather than sampled: a texture lookup would need a
+        // texture to author, ship and bind, and the ground only needs something
+        // stationary and band-limited to break its own flatness.
+        //
+        // The multiply is by a small constant and the fract comes first, which
+        // is the part that matters. The finest octave has a 0.85 m wavelength
+        // and the catchment is 1024 m across, so its lattice coordinate reaches
+        // about 1200 — and hashing that by multiplying up to five figures first
+        // spends the whole float32 mantissa before the fract, collapsing 3600
+        // lattice cells at the far corner onto 235 distinct values. The far
+        // corner of the map then tiles visibly.
+        float cwHash(vec2 cell) {
+          vec3 p = fract(vec3(cell.xyx) * 0.1031);
+          p += dot(p, p.yzx + 33.33);
+          return fract((p.x + p.y) * p.z);
+        }
+
+        float cwNoise(vec2 p) {
+          vec2 cell = floor(p);
+          vec2 f = fract(p);
+          // Smoothstep weights, so the lattice does not show as a square grid of
+          // creases — which, on ground already drawn in 4 m squares, would read
+          // as a second and wrong grid.
+          vec2 w = f * f * (3.0 - 2.0 * f);
+          float a = cwHash(cell);
+          float b = cwHash(cell + vec2(1.0, 0.0));
+          float c = cwHash(cell + vec2(0.0, 1.0));
+          float d = cwHash(cell + vec2(1.0, 1.0));
+          return mix(mix(a, b, w.x), mix(c, d, w.x), w.y);
+        }`,
       )
-      // After map_fragment so the overlay sits on top of the land-cover colour,
-      // and before lighting so it is still shaded by the toon ramp — the risk
-      // map should be painted onto the landscape, not floating above it.
+      // Ground detail first, then the overlay on top of it: the risk map is the
+      // one layer that has to stay legible, and grain applied over it would put
+      // noise on the only thing in the frame that is meant to be read as a
+      // number. Both sit after map_fragment and before lighting, so the toon
+      // ramp still shades them — the map is painted onto the landscape, not
+      // floating above it.
       .replace(
         "#include <map_fragment>",
         /* glsl */ `#include <map_fragment>
+        {
+          vec2 cwGround = vMapUv * ${extentM.toFixed(1)};
+          float cwMottle = cwNoise(cwGround / ${MOTTLE_M.toFixed(2)});
+          float cwGrain = cwNoise(cwGround / ${GRAIN_M.toFixed(2)});
+          float cwTooth = cwNoise(cwGround / ${TOOTH_M.toFixed(2)});
+
+          float cwNear = 1.0 - smoothstep(${DETAIL_NEAR_M.toFixed(1)}, ${DETAIL_FAR_M.toFixed(1)}, length(vViewPosition));
+          float cwDetail = (cwMottle - 0.5) * ${MOTTLE_STRENGTH.toFixed(3)}
+                         + (cwGrain - 0.5) * ${GRAIN_STRENGTH.toFixed(3)} * cwNear
+                         + (cwTooth - 0.5) * ${TOOTH_STRENGTH.toFixed(3)} * cwNear;
+
+          diffuseColor.rgb *= 1.0 + cwDetail;
+          // The darker half warms rather than simply dimming, so a hollow reads
+          // as soil showing through the sward instead of as shadow the sun has
+          // no reason to be casting there.
+          diffuseColor.rgb = mix(
+            diffuseColor.rgb,
+            diffuseColor.rgb * vec3(1.08, 0.97, 0.86),
+            min(1.0, max(-cwDetail, 0.0) * ${SOIL_TINT_GAIN.toFixed(1)})
+          );
+        }
+
         vec4 cwOverlay = texture2D(uOverlay, vMapUv);
         diffuseColor.rgb = mix(diffuseColor.rgb, cwOverlay.rgb, cwOverlay.a * uOverlayMix);`,
       );
