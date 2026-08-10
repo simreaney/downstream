@@ -16,7 +16,7 @@ import { LAYER_STYLE, type LayerKey } from "../worker/overlayPack";
 import { LUTS } from "../worker/ramps";
 
 /** CSS gradient string sampled from the same lookup the overlay is packed with. */
-function rampGradient(ramp: keyof typeof LUTS): string {
+export function rampGradient(ramp: keyof typeof LUTS): string {
   const lut = LUTS[ramp];
   const stops: string[] = [];
   const steps = 12;

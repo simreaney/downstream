@@ -43,6 +43,7 @@ import { createTutorial } from "./ui/tutorial";
 import { createHydrographChart } from "./ui/hydrographChart";
 import { createScorePanel } from "./ui/scorePanel";
 import { createOverlayLegend } from "./ui/overlayLegend";
+import { createOverviewMap } from "./ui/overviewMap";
 import { createRenderer } from "./render/renderer";
 import { buildWorldScene } from "./render/scene";
 import { cellToWorld, worldToCell } from "./render/terrainMesh";
@@ -112,12 +113,29 @@ async function boot(): Promise<void> {
 
   const hud = createHud(uiRoot);
   const legend = createOverlayLegend(uiRoot);
+  const overviewMap = createOverviewMap(
+    uiRoot,
+    GRID,
+    world.arrays.dem,
+    world.arrays.landCover,
+    world.arrays.channelMask,
+    world.outlet,
+  );
 
   const overlay = createOverlayControl({
     sim,
-    setMix: (value) => scene.terrainMaterial.setOverlayMix(value),
-    setOverlay: (rgba) => scene.setOverlay(rgba),
-    onLayerChange: (layer) => legend.show(layer),
+    setMix: (value) => {
+      scene.terrainMaterial.setOverlayMix(value);
+      overviewMap.setMix(value);
+    },
+    setOverlay: (rgba) => {
+      scene.setOverlay(rgba);
+      overviewMap.setOverlay(rgba);
+    },
+    onLayerChange: (layer) => {
+      legend.show(layer);
+      overviewMap.setLayer(layer);
+    },
   });
   overlay.adopt(world.overlay);
 
@@ -296,6 +314,7 @@ async function boot(): Promise<void> {
     camera.update(player.position, input.state.lookX, input.state.lookY, dt);
     input.endFrame();
     overlay.update(dt);
+    if (overviewMap.visible) overviewMap.setPlayer(player.position.x, player.position.z, player.yaw);
 
     scene.character.root.position.copy(player.position);
     scene.character.root.rotation.y = player.yaw;
@@ -361,6 +380,15 @@ async function boot(): Promise<void> {
       return overlay.next();
     }
     if (key === "n") return overlay.off();
+
+    if (key === "tab") {
+      event.preventDefault();
+      return overviewMap.toggle();
+    }
+    if (key === "escape") {
+      if (overviewMap.visible) overviewMap.hide();
+      return;
+    }
 
     if (key === "e") {
       const node = resources.nearest(player.position.x, player.position.z);

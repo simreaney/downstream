@@ -22,7 +22,8 @@ const MARKUP = `
     <div class="hud__readout" id="hud-readout"></div>
     <div class="hud__keys">
       <kbd>WASD</kbd> walk &middot; <kbd>F</kbd> build &middot; <kbd>E</kbd> gather &middot;
-      <kbd>R</kbd> storm &middot; <kbd>Z</kbd> undo &middot; <kbd>K</kbd> save
+      <kbd>R</kbd> storm &middot; <kbd>Z</kbd> undo &middot; <kbd>K</kbd> save &middot;
+      <kbd>Tab</kbd> map
     </div>
   </div>
   <div class="toast" id="toast" hidden></div>

@@ -1,5 +1,5 @@
 {
-  "name": "diffuse-pollution-game",
+  "name": "downstream",
   "version": "0.1.0",
   "description": "Third-person 3D catchment restoration game with a live SCIMAP diffuse-pollution risk model",
   "license": "MIT",

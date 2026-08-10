@@ -452,3 +452,112 @@ kbd {
   color: var(--ink-soft);
   cursor: pointer;
 }
+
+/* -------------------------------------------------------------- overview -- */
+
+.overview {
+  position: fixed;
+  inset: 0;
+  z-index: 20;
+  display: grid;
+  place-content: center;
+  background: rgba(26, 36, 16, 0.6);
+}
+
+.overview[hidden] {
+  display: none;
+}
+
+.overview__panel {
+  width: min(70vh, 70vw, 640px);
+  padding: 0.9rem 1rem 1rem;
+  border-radius: var(--radius);
+  background: var(--paper);
+  box-shadow: var(--shadow);
+}
+
+.overview__head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 1rem;
+  font-size: 0.95rem;
+  font-weight: 650;
+}
+
+.overview__description {
+  margin-top: 0.15rem;
+  color: var(--ink-soft);
+  font-size: 0.76rem;
+}
+
+.overview__canvas-wrap {
+  position: relative;
+  margin-top: 0.6rem;
+  width: 100%;
+  aspect-ratio: 1;
+  border-radius: 8px;
+  overflow: hidden;
+  box-shadow: inset 0 0 0 1px rgba(61, 50, 38, 0.22);
+}
+
+.overview__canvas-wrap canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+  /* Nearest-neighbour, matching the terrain's own textures: crisp cells read
+     as a data product, and blurring them would smear land cover, channel and
+     overlay classes that are deliberately discrete into colours between them. */
+  image-rendering: pixelated;
+}
+
+.overview__marker {
+  position: absolute;
+  width: 0.7rem;
+  height: 0.7rem;
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+}
+
+.overview__marker--outlet {
+  border-radius: 50%;
+  background: var(--water);
+  box-shadow: 0 0 0 2px var(--paper), 0 0 4px rgba(0, 0, 0, 0.4);
+}
+
+.overview__marker--player svg {
+  display: block;
+  overflow: visible;
+  filter: drop-shadow(0 0 2px rgba(0, 0, 0, 0.5));
+}
+
+.overview__ramp {
+  height: 0.55rem;
+  margin-top: 0.6rem;
+  border-radius: 999px;
+  box-shadow: inset 0 0 0 1px rgba(61, 50, 38, 0.22);
+}
+
+.overview__ramp[hidden] {
+  display: none;
+}
+
+.overview__hint {
+  margin-top: 0.5rem;
+  color: var(--ink-soft);
+  font-size: 0.68rem;
+}
+
+.overview__close {
+  width: 1.6rem;
+  height: 1.6rem;
+  border: none;
+  border-radius: 999px;
+  background: rgba(61, 50, 38, 0.1);
+  font: inherit;
+  font-size: 1rem;
+  line-height: 1.6rem;
+  text-align: center;
+  color: var(--ink-soft);
+  cursor: pointer;
+}

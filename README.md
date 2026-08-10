@@ -1,4 +1,4 @@
-# Catchment — a diffuse pollution game
+# Downstream — a diffuse pollution game
 
 A third-person browser game in which you walk a procedurally generated catchment
 and repair it: plant riparian trees, dig attenuation ponds, and build leaky
@@ -18,6 +18,7 @@ the same world.
 | `F` | build at the cell you are facing |
 | `E` | gather wood, stone or the spade |
 | `M` / `N` | cycle the risk overlay / turn it off |
+| `Tab` | open the catchment overview map |
 | `R` | run a 1-in-30 design storm |
 | `Z` | undo the last feature |
 | `K` | save, and copy a share link |

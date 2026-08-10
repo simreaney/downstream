@@ -26,7 +26,7 @@ import { applyCurvature, type CurvatureUniforms } from "./curvature";
  * erodibility of anything else and the player needs to pick it out at a glance,
  * from a hilltop, without turning the risk overlay on.
  */
-const COVER_COLOURS: Record<LandCover, [number, number, number]> = {
+export const COVER_COLOURS: Record<LandCover, [number, number, number]> = {
   [LandCover.Woodland]: [0x46, 0x7d, 0x40],
   [LandCover.Arable]: [0xbd, 0xa2, 0x74],
   [LandCover.ImprovedGrassland]: [0x8d, 0xb8, 0x5e],
