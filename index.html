@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="en-GB">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <title>Catchment — a diffuse pollution game</title>
+    <meta
+      name="description"
+      content="Explore a procedurally generated catchment and repair it with ponds, leaky dams and riparian trees, guided by a live SCIMAP risk map."
+    />
+    <!-- Inline so there is no favicon request to 404 on a subpath deploy. -->
+    <link
+      rel="icon"
+      href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><text y='26' font-size='26'>🏞️</text></svg>"
+    />
+    <link rel="stylesheet" href="/src/ui/styles.css" />
+  </head>
+  <body>
+    <canvas id="viewport"></canvas>
+    <div id="ui-root"></div>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>
