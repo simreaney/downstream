@@ -34,7 +34,7 @@ import { storageOf } from "./game/interventions";
 import { plantingHelps } from "./game/validity";
 import { createFollowCamera } from "./render/camera";
 import { createPlayer } from "./player/controller";
-import { createInput } from "./player/input";
+import { createInput, type GameAction } from "./player/input";
 import { createPlacementGhost } from "./player/placementGhost";
 import { facingTarget } from "./player/targeting";
 import { createAudio } from "./audio/engine";
@@ -63,10 +63,28 @@ const TEST_STORM_RETURN_PERIOD_DAYS = 30;
 /** Game days a storm's playback pushes the next scheduled one back by. */
 const STORM_COOLDOWN_DAYS = 2;
 
-const TOOL_KEYS: Record<string, InterventionKind> = {
-  "1": "tree",
-  "2": "dam",
-  "3": "pond",
+/** Cycle order for the gamepad's shoulder buttons — LB/RB step through this. */
+const TOOL_ORDER: readonly InterventionKind[] = ["tree", "dam", "pond"];
+
+const ACTION_TOOL: Partial<Record<GameAction, InterventionKind>> = {
+  toolTree: "tree",
+  toolDam: "dam",
+  toolPond: "pond",
+};
+
+/** Keyboard keys that map directly onto a `GameAction`, shared with the gamepad. */
+const KEY_ACTIONS: Record<string, GameAction> = {
+  "1": "toolTree",
+  "2": "toolDam",
+  "3": "toolPond",
+  m: "overlayNext",
+  n: "overlayOff",
+  e: "gather",
+  f: "build",
+  " ": "build",
+  r: "storm",
+  k: "save",
+  z: "undo",
 };
 
 async function boot(): Promise<void> {
@@ -315,12 +333,141 @@ async function boot(): Promise<void> {
   const target = { cell: -1, x: 0, z: 0 };
   let busy = false;
 
+  /**
+   * A discrete intent — a key press or a gamepad button just pressed this
+   * frame — resolved into a game action. Keyboard and gamepad both funnel
+   * through this so the two devices stay in lockstep with no duplicated
+   * behaviour to drift apart.
+   */
+  const handleAction = (action: GameAction): void => {
+    const selected = ACTION_TOOL[action];
+    if (selected) {
+      tool = selected;
+      hud.setTool(tool);
+      return;
+    }
+
+    if (action === "toolCycleNext" || action === "toolCyclePrev") {
+      const step = action === "toolCycleNext" ? 1 : -1;
+      const index = (TOOL_ORDER.indexOf(tool) + step + TOOL_ORDER.length) % TOOL_ORDER.length;
+      tool = TOOL_ORDER[index];
+      hud.setTool(tool);
+      return;
+    }
+
+    if (action === "overlayNext") {
+      tutorial.complete("openMap");
+      overlay.next();
+      return;
+    }
+    if (action === "overlayOff") {
+      overlay.off();
+      return;
+    }
+    if (action === "mapToggle") {
+      overviewMap.toggle();
+      return;
+    }
+
+    if (action === "gather") {
+      const node = resources.nearest(player.position.x, player.position.z);
+      if (!node) return;
+      resources.collect(node);
+      const handle = markerHandles.get(node.id);
+      if (handle !== undefined) {
+        scene.pickups[node.kind].remove(handle);
+        markerHandles.delete(node.id);
+      }
+      overviewMap.clearResource(node.id);
+      audio.play("gather");
+      tutorial.complete("gather");
+      if (node.kind === "wood") {
+        inventory.gain(WOOD_PER_NODE, 0);
+        hud.toast(`+${WOOD_PER_NODE} wood`);
+      } else if (node.kind === "stone") {
+        inventory.gain(0, STONE_PER_NODE);
+        hud.toast(`+${STONE_PER_NODE} stone`);
+      } else {
+        inventory.giveSpade();
+        hud.toast("You found a spade — you can dig ponds now");
+      }
+      return;
+    }
+
+    if (action === "build") {
+      // One placement in flight at a time. Holding the button would otherwise
+      // queue recomputes whose intermediate results the player never sees.
+      if (busy) return;
+      busy = true;
+      void build
+        .place(tool, target.cell, performance.now() / 1000)
+        .then((result) => hud.toast(result.message))
+        .finally(() => {
+          busy = false;
+        });
+      return;
+    }
+
+    if (action === "storm") {
+      tutorial.complete("storm");
+      weather.defer(STORM_COOLDOWN_DAYS);
+      runStorm(
+        depthForReturnPeriod(gumbel, TEST_STORM_RETURN_PERIOD_DAYS),
+        "A 1-in-30 storm is coming…",
+      );
+      return;
+    }
+
+    if (action === "save") {
+      const data: SaveData = {
+        version: SAVE_VERSION,
+        seed,
+        sizeId,
+        elapsedSeconds: performance.now() / 1000,
+        wood: inventory.wood,
+        stone: inventory.stone,
+        hasSpade: inventory.hasSpade,
+        collected: resources.nodes.filter((node) => node.collected).map((node) => node.id),
+        interventions: [...build.interventions],
+      };
+
+      void saveToStorage(data)
+        .then(async (code) => {
+          const url = shareUrl(code);
+          window.history.replaceState(null, "", url);
+          // Best effort: clipboard access needs a permission some browsers only
+          // grant on a user gesture, and a failed copy must not lose the save.
+          try {
+            await navigator.clipboard.writeText(url);
+            hud.toast("Saved — link copied to clipboard");
+          } catch {
+            hud.toast("Saved — the link is in your address bar");
+          }
+        })
+        .catch(() => hud.toast("Could not save"));
+      return;
+    }
+
+    if (action === "undo") {
+      if (busy) return;
+      busy = true;
+      void build
+        .undo()
+        .then((result) => hud.toast(result.message))
+        .finally(() => {
+          busy = false;
+        });
+    }
+  };
+
   renderer.onFrame((dt, elapsed) => {
+    input.poll(dt);
     scene.water.update(elapsed);
     storm.update(dt);
     player.update(input.state, camera.yaw, dt);
     camera.update(player.position, input.state.lookX, input.state.lookY, dt);
     input.endFrame();
+    for (const action of input.state.actions ?? []) handleAction(action);
     overlay.update(dt);
     if (overviewMap.visible) overviewMap.setPlayer(player.position.x, player.position.z, player.yaw);
 
@@ -378,115 +525,20 @@ async function boot(): Promise<void> {
     if (event.repeat || event.metaKey || event.ctrlKey) return;
     const key = event.key.toLowerCase();
 
-    if (key in TOOL_KEYS) {
-      tool = TOOL_KEYS[key];
-      hud.setTool(tool);
-      return;
-    }
-    if (key === "m") {
-      tutorial.complete("openMap");
-      return overlay.next();
-    }
-    if (key === "n") return overlay.off();
-
+    // Not GameActions: Tab and Escape address the overview map's open/closed
+    // state directly rather than toggling it, which a gamepad button doesn't need.
     if (key === "tab") {
       event.preventDefault();
-      return overviewMap.toggle();
+      overviewMap.toggle();
+      return;
     }
     if (key === "escape") {
       if (overviewMap.visible) overviewMap.hide();
       return;
     }
 
-    if (key === "e") {
-      const node = resources.nearest(player.position.x, player.position.z);
-      if (!node) return;
-      resources.collect(node);
-      const handle = markerHandles.get(node.id);
-      if (handle !== undefined) {
-        scene.pickups[node.kind].remove(handle);
-        markerHandles.delete(node.id);
-      }
-      overviewMap.clearResource(node.id);
-      audio.play("gather");
-      tutorial.complete("gather");
-      if (node.kind === "wood") {
-        inventory.gain(WOOD_PER_NODE, 0);
-        hud.toast(`+${WOOD_PER_NODE} wood`);
-      } else if (node.kind === "stone") {
-        inventory.gain(0, STONE_PER_NODE);
-        hud.toast(`+${STONE_PER_NODE} stone`);
-      } else {
-        inventory.giveSpade();
-        hud.toast("You found a spade — you can dig ponds now");
-      }
-      return;
-    }
-
-    if (key === "f" || key === " ") {
-      // One placement in flight at a time. Holding the key would otherwise queue
-      // recomputes whose intermediate results the player never sees.
-      if (busy) return;
-      busy = true;
-      void build
-        .place(tool, target.cell, performance.now() / 1000)
-        .then((result) => hud.toast(result.message))
-        .finally(() => {
-          busy = false;
-        });
-      return;
-    }
-
-    if (key === "r") {
-      tutorial.complete("storm");
-      weather.defer(STORM_COOLDOWN_DAYS);
-      runStorm(
-        depthForReturnPeriod(gumbel, TEST_STORM_RETURN_PERIOD_DAYS),
-        "A 1-in-30 storm is coming…",
-      );
-      return;
-    }
-
-    if (key === "k") {
-      const data: SaveData = {
-        version: SAVE_VERSION,
-        seed,
-        sizeId,
-        elapsedSeconds: performance.now() / 1000,
-        wood: inventory.wood,
-        stone: inventory.stone,
-        hasSpade: inventory.hasSpade,
-        collected: resources.nodes.filter((node) => node.collected).map((node) => node.id),
-        interventions: [...build.interventions],
-      };
-
-      void saveToStorage(data)
-        .then(async (code) => {
-          const url = shareUrl(code);
-          window.history.replaceState(null, "", url);
-          // Best effort: clipboard access needs a permission some browsers only
-          // grant on a user gesture, and a failed copy must not lose the save.
-          try {
-            await navigator.clipboard.writeText(url);
-            hud.toast("Saved — link copied to clipboard");
-          } catch {
-            hud.toast("Saved — the link is in your address bar");
-          }
-        })
-        .catch(() => hud.toast("Could not save"));
-      return;
-    }
-
-    if (key === "z") {
-      if (busy) return;
-      busy = true;
-      void build
-        .undo()
-        .then((result) => hud.toast(result.message))
-        .finally(() => {
-          busy = false;
-        });
-    }
+    const action = KEY_ACTIONS[key];
+    if (action) handleAction(action);
   });
 
   setProgress(100, "Ready");
