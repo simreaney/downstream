@@ -15,8 +15,11 @@ const BASE_FBM: FbmOptions = {
   octaves: 6,
   lacunarity: 2.0,
   gain: 0.5,
-  // One primary landform across the catchment, dissected by finer octaves.
-  frequency: 2.2,
+  // Raised from 2.2: a couple of primary landforms across the catchment
+  // rather than one, so the ground undulates along the valley instead of
+  // presenting a single even hillside on each bank. Dissected by finer
+  // octaves either way.
+  frequency: 2.6,
 };
 
 /** How far, in noise units, the warp displaces the sample point. */

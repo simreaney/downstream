@@ -7,7 +7,8 @@ running live on the generated topography, re-solving every time you place
 something.
 
 Play: `?seed=20260809` loads a specific catchment; the same seed always rebuilds
-the same world.
+the same world. `?size=small|medium|large` picks how big a catchment to
+generate (defaults to medium, the shipped 1024 m grid).
 
 ## Controls
 
@@ -96,8 +97,8 @@ blocking it.
 
 ## Determinism
 
-A save is a seed plus an ordered list of interventions — a few hundred bytes,
-small enough to be a URL. That only works because generation is exactly
+A save is a seed, a landscape size and an ordered list of interventions — a few
+hundred bytes, small enough to be a URL. That only works because generation is exactly
 reproducible, so every random draw goes through `splitSeed(seed, tag)` in
 `core/rng.ts`. `npm run lint:hotpath` fails the build on `Math.random()` anywhere
 else, and on comparator sorts in the compute path.

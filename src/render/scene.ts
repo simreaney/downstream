@@ -62,8 +62,15 @@ export interface WorldScene {
    * silently re-route the catchment.
    */
   readonly renderDem: Float32Array;
-  /** Build a leaky dam at a world position and add it to the scene. */
-  damFactory(position: THREE.Vector3): THREE.Object3D;
+  /**
+   * Build a leaky dam at a world position and add it to the scene.
+   *
+   * `rotationY` orients the dam across the local channel — see
+   * `buildController.ts`'s `damRotation`, which derives it from steepest
+   * descent so the dam spans whichever way the watercourse actually runs
+   * instead of a fixed compass direction.
+   */
+  damFactory(position: THREE.Vector3, rotationY: number): THREE.Object3D;
   readonly pickups: Record<"wood" | "stone" | "spade", InstancedBatch>;
   /** Upload a freshly packed overlay from the worker. */
   setOverlay(rgba: Uint8Array<ArrayBuffer>): void;
@@ -219,7 +226,7 @@ export function buildWorldScene(
     renderDem,
     pickups,
 
-    damFactory(position) {
+    damFactory(position, rotationY) {
       const group = new THREE.Group();
       for (const damPart of damAsset.parts) {
         const mesh = new THREE.Mesh(damPart.geometry, damPart.material);
@@ -228,7 +235,7 @@ export function buildWorldScene(
         group.add(mesh);
       }
       group.position.copy(position);
-      group.rotation.y = Math.PI * 0.5;
+      group.rotation.y = rotationY;
       scene.add(group);
       return group;
     },

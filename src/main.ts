@@ -9,7 +9,7 @@
  */
 
 import * as THREE from "three";
-import { GRID } from "./config";
+import { DEFAULT_LANDSCAPE_SIZE, LANDSCAPE_SIZES, landscapeSpec, type LandscapeSizeId } from "./config";
 import { randomSeed } from "./core/rng";
 import {
   SAVE_VERSION,
@@ -90,24 +90,30 @@ async function boot(): Promise<void> {
   await sim.ping();
 
   // A share code in the URL wins over local storage, which wins over a fresh
-  // seed. Resolved before generation, because the save owns the seed.
+  // seed. Resolved before generation, because the save owns the seed — and,
+  // likewise, the save owns the landscape size: an intervention's cell index
+  // only means the same place decoded against the grid width it was recorded
+  // with, so a restored save regenerates at the size it was built on rather
+  // than whatever the URL or default currently says.
   const restored = await resolveSave();
   const seed = restored?.seed ?? readSeed();
-  const world = await sim.generate(seed, "sourceRisk", setProgress);
-  const scene = buildWorldScene(renderer.scene, world, GRID);
+  const sizeId = restored?.sizeId ?? readLandscapeSize();
+  const spec = landscapeSpec(sizeId);
+  const world = await sim.generate(seed, "sourceRisk", spec, setProgress);
+  const scene = buildWorldScene(renderer.scene, world, world.spec);
 
   // Start upslope of the outlet, looking into the catchment — the view that
   // shows the trunk valley and where the work is.
-  const outletPosition = cellToWorld(GRID, world.outlet, new THREE.Vector3());
+  const outletPosition = cellToWorld(world.spec, world.outlet, new THREE.Vector3());
   outletPosition.y = world.arrays.dem[world.outlet];
   const start = outletPosition.clone().multiplyScalar(0.72);
 
-  const player = createPlayer(world.arrays.dem, GRID, start, scene.obstacles);
+  const player = createPlayer(world.arrays.dem, world.spec, start, scene.obstacles);
   const input = createInput(canvas);
   const camera = createFollowCamera(
     renderer.camera,
     world.arrays.dem,
-    GRID,
+    world.spec,
     Math.atan2(-start.x, -start.z),
   );
 
@@ -115,7 +121,7 @@ async function boot(): Promise<void> {
   const legend = createOverlayLegend(uiRoot);
   const overviewMap = createOverviewMap(
     uiRoot,
-    GRID,
+    world.spec,
     world.arrays.dem,
     world.arrays.landCover,
     world.arrays.channelMask,
@@ -150,9 +156,9 @@ async function boot(): Promise<void> {
 
   const resources = createResources(
     world.arrays,
-    GRID,
+    world.spec,
     seed,
-    worldToCell(GRID, start.x, start.z),
+    worldToCell(world.spec, start.x, start.z),
   );
 
   // Give every node a marker, remembering the handle so collecting it removes
@@ -182,7 +188,7 @@ async function boot(): Promise<void> {
 
   /** Volume a design storm drops on the catchment, for the pre-storm proxy. */
   const designStormVolumeM3 =
-    (32 / 1000) * GRID.width * GRID.height * GRID.cellSize * GRID.cellSize * 0.25;
+    (32 / 1000) * world.spec.width * world.spec.height * world.spec.cellSize * world.spec.cellSize * 0.25;
 
   /**
    * Declared before the build controller it reads, and called only after it
@@ -207,7 +213,7 @@ async function boot(): Promise<void> {
   const build = createBuildController({
     sim,
     scene,
-    spec: GRID,
+    spec: world.spec,
     inventory,
     currentLayer: () => (overlay.layer === "none" ? "sourceRisk" : overlay.layer),
     onRecomputed: (rgba, metrics) => {
@@ -342,7 +348,7 @@ async function boot(): Promise<void> {
     }
     scene.fish.setVisibleCount(receptors.fishCount);
 
-    facingTarget(GRID, player.position.x, player.position.z, player.yaw, target);
+    facingTarget(world.spec, player.position.x, player.position.z, player.yaw, target);
 
     // Gathering takes priority in the readout: if the player is standing next to
     // something they can pick up, that is what E will do.
@@ -355,7 +361,7 @@ async function boot(): Promise<void> {
 
     const check = build.preview(tool, target.cell);
     const helpful = tool !== "tree" || plantingHelps(world.arrays, target.cell);
-    ghost.show(GRID, scene.renderDem, target.x, target.z, tool === "pond" ? 5 : 1.4, check, helpful);
+    ghost.show(world.spec, scene.renderDem, target.x, target.z, tool === "pond" ? 5 : 1.4, check, helpful);
 
     hud.setReadout(
       check.ok
@@ -445,6 +451,7 @@ async function boot(): Promise<void> {
       const data: SaveData = {
         version: SAVE_VERSION,
         seed,
+        sizeId,
         elapsedSeconds: performance.now() / 1000,
         wood: inventory.wood,
         stone: inventory.stone,
@@ -526,6 +533,20 @@ function readSeed(): number {
     if (Number.isFinite(parsed)) return parsed >>> 0;
   }
   return randomSeed();
+}
+
+/**
+ * Landscape size from the URL, or the shipped default.
+ *
+ * `?size=small|medium|large` picks how big a catchment to generate — see
+ * `LANDSCAPE_SIZES` in config.ts for what each one means and why the range is
+ * as narrow as it is. An unrecognised or missing value falls back to the
+ * default rather than rejecting the URL, the same tolerance `readSeed` gives
+ * a malformed `?seed=`.
+ */
+function readLandscapeSize(): LandscapeSizeId {
+  const fromUrl = new URLSearchParams(window.location.search).get("size");
+  return LANDSCAPE_SIZES.find((option) => option.id === fromUrl)?.id ?? DEFAULT_LANDSCAPE_SIZE;
 }
 
 boot().catch((error: unknown) => {

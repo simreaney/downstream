@@ -12,7 +12,7 @@
  * reload. That is what lets a save file be a seed plus a list of interventions.
  */
 
-import type { GridSpec } from "../core/grid";
+import { cellCount, type GridSpec } from "../core/grid";
 import { createRng, splitSeed } from "../core/rng";
 import type { ProgressCallback } from "../worker/protocol";
 import { fillDepressions } from "../scimap/fill";
@@ -67,6 +67,7 @@ export function generateTerrain(seed: number, options: TerrainOptions = {}): Ter
   onProgress?.(10, "1.4 Cutting the valleys…");
   erode(dem, spec, createRng(splitSeed(seed, "terrain:erosion")), {
     ...DEFAULT_EROSION,
+    droplets: defaultDropletsFor(spec),
     ...options.erosion,
   });
 
@@ -95,4 +96,20 @@ export function generateTerrain(seed: number, options: TerrainOptions = {}): Ter
 
   onProgress?.(32, "1.7 Topography ready.");
   return { spec, seed, dem, outlet };
+}
+
+/**
+ * Droplet count scaled to the catchment's cell count, so a landscape at a
+ * different size (see `LANDSCAPE_SIZES` in config.ts) is carved just as
+ * thoroughly per square metre as the shipped grid rather than left under- or
+ * over-eroded.
+ *
+ * `DEFAULT_EROSION.droplets` is the count `hydraulicErosion.ts` was tuned
+ * against on the shipped 256 x 256 grid; every other size is that same
+ * density of droplets per cell. A caller that passes its own `droplets`
+ * still wins outright — this only fills in the default.
+ */
+function defaultDropletsFor(spec: GridSpec): number {
+  const referenceCells = GRID.width * GRID.height;
+  return Math.round((DEFAULT_EROSION.droplets * cellCount(spec)) / referenceCells);
 }

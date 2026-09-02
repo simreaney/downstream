@@ -10,6 +10,7 @@
  */
 
 import type { StretchBounds } from "../core/normalise";
+import type { GridSpec } from "../core/grid";
 import type { LayerKey } from "./overlayPack";
 import type {
   BreakDto,
@@ -35,6 +36,8 @@ export interface MainThreadArrays {
 
 export interface GeneratedWorld {
   readonly seed: number;
+  /** The extent this catchment was actually generated at. */
+  readonly spec: GridSpec;
   readonly outlet: number;
   readonly arrays: MainThreadArrays;
   /** Explicitly ArrayBuffer-backed, so it can be transferred back for reuse. */
@@ -69,7 +72,12 @@ export interface StormPlayback {
 
 export interface SimClient {
   ping(): Promise<number>;
-  generate(seed: number, layer: LayerKey, onProgress?: ProgressCallback): Promise<GeneratedWorld>;
+  generate(
+    seed: number,
+    layer: LayerKey,
+    spec?: GridSpec,
+    onProgress?: ProgressCallback,
+  ): Promise<GeneratedWorld>;
   recompute(
     layer: LayerKey,
     breaks: readonly BreakDto[],
@@ -160,12 +168,13 @@ export function createSimClient(): SimClient {
       return performance.now() - started;
     },
 
-    async generate(seed, layer, onProgress) {
-      const response = await send({ type: "generate", seed, layer }, onProgress);
+    async generate(seed, layer, spec, onProgress) {
+      const response = await send({ type: "generate", seed, layer, spec }, onProgress);
       if (response.type !== "generated") throw new Error(`Unexpected ${response.type}`);
 
       return {
         seed: response.seed,
+        spec: response.spec,
         outlet: response.outlet,
         arrays: {
           dem: new Float32Array(response.dem),

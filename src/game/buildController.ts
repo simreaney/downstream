@@ -16,12 +16,12 @@
 
 import * as THREE from "three";
 import type { GridSpec } from "../core/grid";
-import { cellAreaM2 } from "../core/grid";
+import { cellAreaM2, N8_DCOL, N8_DIST, N8_DROW } from "../core/grid";
 import { capacityCells } from "../scimap/twi";
 import type { WorldScene } from "../render/scene";
 import { cellToWorld } from "../render/terrainMesh";
 import type { BreakDto, CoverEditDto } from "../worker/protocol";
-import type { SimClient } from "../worker/client";
+import type { MainThreadArrays, SimClient } from "../worker/client";
 import {
   coverOf,
   costOf,
@@ -120,7 +120,8 @@ export function createBuildController(options: BuildOptions): BuildController {
       );
       propHandles.set(feature.id, null);
     } else {
-      damGroups.set(feature.id, scene.damFactory(at));
+      const rotationY = damRotation(scene.arrays, spec, feature.cell);
+      damGroups.set(feature.id, scene.damFactory(at, rotationY));
       propHandles.set(feature.id, null);
     }
   };
@@ -247,6 +248,47 @@ export function createBuildController(options: BuildOptions): BuildController {
       return { placed: true, message: `${label(feature.kind)} removed` };
     },
   };
+}
+
+/**
+ * Rotation (radians, about world Y) that spans a leaky dam across the local
+ * channel rather than along it.
+ *
+ * A dam built along the direction of flow lets water straight past it — the
+ * whole point of the structure is to sit crosswise. There is no separate flow
+ * direction grid on the main thread, so this retraces steepest descent from
+ * the DEM directly, the same rule `scimap/d8.ts` uses to build the routing
+ * network on the worker side.
+ */
+function damRotation(arrays: MainThreadArrays, spec: GridSpec, cell: number): number {
+  const row = (cell / spec.width) | 0;
+  const col = cell % spec.width;
+  const dem = arrays.dem;
+  const z = dem[cell];
+
+  let bestGrad = 0;
+  // Falls back to spanning east-west if every neighbour is flat or higher,
+  // which only happens right at a filled pit or the map edge.
+  let downRow = 0;
+  let downCol = 1;
+  for (let k = 0; k < 8; k++) {
+    const nRow = row + N8_DROW[k];
+    const nCol = col + N8_DCOL[k];
+    if (nRow < 0 || nRow >= spec.height || nCol < 0 || nCol >= spec.width) continue;
+
+    const grad = (z - dem[nRow * spec.width + nCol]) / N8_DIST[k];
+    if (grad > bestGrad) {
+      bestGrad = grad;
+      downRow = N8_DROW[k];
+      downCol = N8_DCOL[k];
+    }
+  }
+
+  // Row maps to world Z and column to world X (see cellToWorld), so rotating
+  // the downstream vector 90 degrees gives the across-channel direction.
+  const acrossX = -downRow;
+  const acrossZ = downCol;
+  return Math.atan2(-acrossZ, acrossX);
 }
 
 function label(kind: InterventionKind): string {
