@@ -198,7 +198,19 @@ export function createInput(target: HTMLElement): Input {
    */
   const pollGamepad = (dt: number): void => {
     actions.clear();
-    const pad = gamepadIndex !== null ? navigator.getGamepads()[gamepadIndex] : null;
+    let pad: Gamepad | null = null;
+    if (gamepadIndex !== null) {
+      pad = navigator.getGamepads()[gamepadIndex] ?? null;
+    } else {
+      const pads = navigator.getGamepads();
+      for (let i = 0; i < pads.length; i++) {
+        if (pads[i]) {
+          pad = pads[i];
+          gamepadIndex = i;
+          break;
+        }
+      }
+    }
     if (!pad) {
       gamepadMoveX = 0;
       gamepadMoveZ = 0;
@@ -247,7 +259,7 @@ export function createInput(target: HTMLElement): Input {
       return sprint || gamepadSprint;
     },
     get actions() {
-      return actions;
+      return gamepadIndex !== null ? actions : undefined;
     },
   };
 
