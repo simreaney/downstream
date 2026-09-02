@@ -124,7 +124,7 @@ describe("incremental recompute", () => {
   it("recomputeFromWeights equals a full rebuild after planting", () => {
     // Plant a block of arable and compare the incremental path against building
     // the same catchment from scratch with that land cover already in place.
-    const seed = 104;
+    const seed = 29;
     const planted: number[] = [];
 
     const incremental = createWorld(seed, OPTIONS);

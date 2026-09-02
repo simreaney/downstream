@@ -9,6 +9,7 @@
  * everything else mutates it in place.
  */
 
+import type { GridSpec } from "../core/grid";
 import { buildRiskWeight } from "../scimap/landcover";
 import { recomputeFromTwi } from "../scimap/pipeline";
 import { computeBufferBreaks } from "../scimap/buffer";
@@ -146,10 +147,11 @@ export interface GenerateResult {
 export function handleGenerate(
   seed: number,
   layer: LayerKey,
+  spec?: GridSpec,
   onProgress?: ProgressCallback,
 ): GenerateResult {
   currentLayer = layer;
-  world = createWorld(seed, {}, onProgress);
+  world = createWorld(seed, { spec }, onProgress);
 
   onProgress?.(76, "3.1 Tracing the river network…");
   const { arrays } = world;

@@ -46,8 +46,8 @@ self.onmessage = (event: MessageEvent<SimRequest>): void => {
         break;
 
       case "generate": {
-        const { jobId, seed, layer } = request;
-        const result = handleGenerate(seed, layer, (progress, message) => {
+        const { jobId, seed, layer, spec } = request;
+        const result = handleGenerate(seed, layer, spec, (progress, message) => {
           post({ type: "progress", jobId, progress, message });
         });
 
@@ -68,6 +68,7 @@ self.onmessage = (event: MessageEvent<SimRequest>): void => {
             type: "generated",
             jobId,
             seed,
+            spec: arrays.spec,
             outlet: arrays.outlet,
             dem: dem.buffer,
             slopeDeg: slopeDeg.buffer,

@@ -18,6 +18,7 @@
  * you can beat 82" is a link, which is worth having for a lecture.
  */
 
+import { DEFAULT_LANDSCAPE_SIZE, LANDSCAPE_SIZES, type LandscapeSizeId } from "../config";
 import type { Intervention, InterventionKind } from "./interventions";
 
 /** Bumped when the shape below changes in a way older saves cannot satisfy. */
@@ -26,6 +27,15 @@ export const SAVE_VERSION = 1;
 export interface SaveData {
   readonly version: number;
   readonly seed: number;
+  /**
+   * Which of `LANDSCAPE_SIZES` this catchment was generated at.
+   *
+   * A cell index only means the same place if it is decoded against the grid
+   * width it was recorded with, so the save has to carry the size alongside
+   * the seed — replaying a "large" save's interventions against a freshly
+   * defaulted "medium" grid would scatter them across the wrong ground.
+   */
+  readonly sizeId: LandscapeSizeId;
   readonly elapsedSeconds: number;
   readonly wood: number;
   readonly stone: number;
@@ -39,6 +49,8 @@ export interface SaveData {
 interface WireSave {
   v: number;
   s: number;
+  /** Landscape size id. Absent on saves from before sizes were adjustable. */
+  z?: string;
   t: number;
   w: number;
   n: number;
@@ -58,6 +70,7 @@ function toWire(save: SaveData): WireSave {
   return {
     v: save.version,
     s: save.seed,
+    z: save.sizeId,
     t: Math.round(save.elapsedSeconds),
     w: save.wood,
     n: save.stone,
@@ -75,9 +88,15 @@ function fromWire(wire: WireSave): SaveData {
     interventions.push({ kind, id: interventions.length + 1, cell: wire.i[i + 1], at: wire.i[i + 2] });
   }
 
+  // An older save with no recorded size predates adjustable sizes, so it was
+  // always the shipped default.
+  const sizeId =
+    LANDSCAPE_SIZES.find((option) => option.id === wire.z)?.id ?? DEFAULT_LANDSCAPE_SIZE;
+
   return {
     version: wire.v,
     seed: wire.s >>> 0,
+    sizeId,
     elapsedSeconds: wire.t,
     wood: wire.w,
     stone: wire.n,

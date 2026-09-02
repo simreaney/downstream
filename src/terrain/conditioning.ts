@@ -41,10 +41,18 @@ import { reliefFor } from "../config";
  * locally: the surface acquires closed basins, the fill floods them, and valley
  * floors arrive as flat lakes with no usable flow direction — precisely where
  * connectivity matters most.
+ *
+ * Raised from 0.22 to give the catchment more relief away from the trunk
+ * valley — a flatter noise term reads as one smooth hillside either side of
+ * the river, which is a duller walk and gives riparian planting nowhere
+ * interesting to go. 0.24, paired with the higher base frequency in
+ * `ridgedFbm.ts`, was the highest that stayed clear of the flooded-cell
+ * budget below across a spread of seeds; higher again started spending that
+ * budget on closed basins rather than walkable variation.
  */
 const TILT_WEIGHT = 0.7;
 const LATERAL_WEIGHT = 0.45;
-const NOISE_WEIGHT = 0.22;
+const NOISE_WEIGHT = 0.24;
 
 /**
  * Divide wall along the grid edge, and how far in it reaches as a fraction of

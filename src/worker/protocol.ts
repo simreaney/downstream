@@ -17,6 +17,7 @@
  */
 
 import type { StretchBounds } from "../core/normalise";
+import type { GridSpec } from "../core/grid";
 import type { LayerKey } from "./overlayPack";
 
 /** Progress reporting matches the signature used across the SCIMAP codebase. */
@@ -51,7 +52,14 @@ export type DistributiveOmit<T, K extends PropertyKey> = T extends unknown ? Omi
 
 export type SimRequest =
   | { type: "ping"; jobId: number }
-  | { type: "generate"; jobId: number; seed: number; layer: LayerKey }
+  | {
+      type: "generate";
+      jobId: number;
+      seed: number;
+      layer: LayerKey;
+      /** Catchment extent to generate at. Undefined means the shipped default. */
+      spec?: GridSpec;
+    }
   | {
       type: "recompute";
       jobId: number;
@@ -112,6 +120,8 @@ export type SimResponse =
       type: "generated";
       jobId: number;
       seed: number;
+      /** The extent this catchment was actually generated at. */
+      spec: GridSpec;
       outlet: number;
       /** Elevation for the terrain mesh and ground following. */
       dem: ArrayBuffer;

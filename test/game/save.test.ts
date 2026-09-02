@@ -20,6 +20,7 @@ function save(overrides: Partial<SaveData> = {}): SaveData {
   return {
     version: SAVE_VERSION,
     seed: 20260809,
+    sizeId: "medium",
     elapsedSeconds: 742,
     wood: 17,
     stone: 4,
@@ -40,6 +41,7 @@ describe("save round trip", () => {
     const restored = await deserialise(await serialise(original));
 
     expect(restored.seed).toBe(original.seed);
+    expect(restored.sizeId).toBe(original.sizeId);
     expect(restored.wood).toBe(original.wood);
     expect(restored.stone).toBe(original.stone);
     expect(restored.hasSpade).toBe(original.hasSpade);
@@ -100,5 +102,11 @@ describe("save round trip", () => {
 
   it("rejects rubbish", async () => {
     await expect(deserialise("not-a-code")).rejects.toThrow();
+  });
+
+  it("round-trips a non-default landscape size", async () => {
+    const original = save({ sizeId: "large" });
+    const restored = await deserialise(await serialise(original));
+    expect(restored.sizeId).toBe("large");
   });
 });

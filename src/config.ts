@@ -11,6 +11,10 @@
  * Doubling to 512 would quadruple every sweep and push recompute past 100 ms,
  * at which point the overlay has to update on release rather than live — and
  * that immediacy is the entire teaching mechanism.
+ *
+ * This is the shipped default rather than the only option: `LANDSCAPE_SIZES`
+ * below offers a couple of neighbouring sizes for the player to choose, within
+ * the margin that budget allows.
  */
 
 import type { GridSpec } from "./core/grid";
@@ -24,6 +28,44 @@ export const GRID: GridSpec = {
 export const CELL_COUNT = GRID.width * GRID.height;
 export const CELL_AREA_M2 = GRID.cellSize * GRID.cellSize;
 export const WORLD_SIZE_M = GRID.width * GRID.cellSize;
+
+export type LandscapeSizeId = "small" | "medium" | "large";
+
+export interface LandscapeSizeOption {
+  readonly id: LandscapeSizeId;
+  readonly label: string;
+  readonly spec: GridSpec;
+}
+
+/**
+ * Landscape sizes the player can choose between before a catchment is
+ * generated.
+ *
+ * Only width and height vary — cell size stays 4 m at every size, so channel
+ * initiation density (`channelThresholdCells`) and the noise frequencies
+ * tuned against a 4 m cell mean the same thing regardless of which one is
+ * picked. Relief still scales with extent through `reliefFor`, so a bigger
+ * catchment reads as more of the same landscape rather than a flatter or
+ * steeper one.
+ *
+ * The spread is deliberately narrow. Doubling 256 to 512 would quadruple
+ * every sweep in the SCIMAP pipeline and push recompute past the frame
+ * budget that lets the risk overlay update live as the player places things
+ * — see the module doc above. "Large" here is 320, 1.25x the shipped extent
+ * and about 1.6x the cell count, chosen to stay well inside that budget.
+ */
+export const LANDSCAPE_SIZES: readonly LandscapeSizeOption[] = [
+  { id: "small", label: "Small — 768 m", spec: { width: 192, height: 192, cellSize: GRID.cellSize } },
+  { id: "medium", label: "Medium — 1024 m", spec: GRID },
+  { id: "large", label: "Large — 1280 m", spec: { width: 320, height: 320, cellSize: GRID.cellSize } },
+];
+
+export const DEFAULT_LANDSCAPE_SIZE: LandscapeSizeId = "medium";
+
+/** Resolve a landscape size id (e.g. from a URL param) to its grid, falling back to the default. */
+export function landscapeSpec(id: string | null): GridSpec {
+  return LANDSCAPE_SIZES.find((option) => option.id === id)?.spec ?? GRID;
+}
 
 /**
  * Vertical relief from outlet to catchment divide, as a fraction of the
