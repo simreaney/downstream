@@ -12,17 +12,23 @@ generate (defaults to medium, the shipped 1024 m grid).
 
 ## Controls
 
-| | |
-|---|---|
-| `WASD` | walk (`Shift` to run), drag to orbit the camera |
-| `1` `2` `3` | plant / leaky dam / pond |
-| `F` | build at the cell you are facing |
-| `E` | gather wood, stone or the spade |
-| `M` / `N` | cycle the risk overlay / turn it off |
-| `Tab` | open the catchment overview map |
-| `R` | run a 1-in-30 design storm |
-| `Z` | undo the last feature |
-| `K` | save, and copy a share link |
+| Keyboard / mouse | Gamepad | |
+|---|---|---|
+| `WASD` | left stick | walk (`Shift` / left trigger to run), right stick / drag to orbit |
+| `1` `2` `3` | D-pad up / right / down | plant / leaky dam / pond |
+| — | LB / RB | cycle tool back / forward |
+| `F` | A | build at the cell you are facing |
+| `E` | B | gather wood, stone or the spade |
+| `M` / `N` | X / Back | cycle the risk overlay / turn it off |
+| `Tab` | Y | open the catchment overview map |
+| `R` | RT | run a 1-in-30 design storm |
+| `Z` | D-pad left | undo the last feature |
+| `K` | Start | save, and copy a share link |
+
+Any Bluetooth or USB controller works — the browser's Gamepad API maps it onto
+this layout regardless of brand, so it's read as Xbox-style buttons even from a
+PlayStation pad. Connect it and press a button once to wake it up; browsers
+only report a gamepad after its first input.
 
 ## Running it
 
