@@ -150,11 +150,13 @@ export function buildWorldScene(
   const settlements = new THREE.Group();
   scene.add(settlements);
 
-  // A building is solid. Collected here rather than derived later because this
-  // is the only place that knows where each one ended up, and a second pass
-  // over `settlements` would have to re-derive a footprint from meshes that
-  // have already been rotated into place.
-  const obstacles: Obstacle[] = [];
+  // A building is solid, and so is a boulder. Buildings are collected here
+  // rather than derived later because this is the only place that knows where
+  // each one ended up, and a second pass over `settlements` would have to
+  // re-derive a footprint from meshes that have already been rotated into
+  // place; the scattered rocks' footprints come from `scatter`, which is the
+  // only place that knows their per-instance scale.
+  const obstacles: Obstacle[] = [...scatter.rockObstacles];
 
   const place = (id: Parameters<typeof getProp>[0], cell: number, rotation: number): void => {
     const asset = getProp(id, props);

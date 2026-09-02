@@ -141,12 +141,23 @@ export function createPlayer(
 
       // Rotate the intent into world space so "forward" means away from the
       // camera, then normalise so diagonals are not faster than cardinals.
+      //
+      // Both terms are negated relative to the textbook rotation matrix. The z
+      // negation is because the camera's own forward axis (see
+      // `createFollowCamera`) is +z at yaw zero, while "forward" input arrives
+      // as z = -1 (screen-space up). The x negation is because that same camera
+      // has its screen-right axis at world -x when yaw is zero (it orbits behind
+      // the target rather than sitting in front of it), while "right" input
+      // arrives as x = +1. Using the unnegated matrix rotates the *input's*
+      // frame instead of mapping it onto the camera's, which mirrors the
+      // controls: forward/backward walks the player backward at yaw zero, and
+      // left/right walks them the wrong way at every yaw.
       const sin = Math.sin(cameraYaw);
       const cos = Math.cos(cameraYaw);
       desired.set(
-        (inputX * cos - inputZ * sin) / magnitude,
+        -(inputX * cos + inputZ * sin) / magnitude,
         0,
-        (inputX * sin + inputZ * cos) / magnitude,
+        (inputX * sin - inputZ * cos) / magnitude,
       );
 
       const target = input.sprint ? SPRINT_SPEED : WALK_SPEED;

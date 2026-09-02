@@ -548,7 +548,7 @@ async function boot(): Promise<void> {
     `catchment ${seed}: outlet ${world.outlet}, ${world.reaches.length} reaches, ` +
       `mean source risk ${world.metrics.meanSourceRisk.toFixed(4)}, ` +
       `${resources.nodes.length} resource nodes, ` +
-      `${scene.obstacles.length} solid buildings`,
+      `${scene.obstacles.length} solid obstacles`,
   );
 
   renderer.start();

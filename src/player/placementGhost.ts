@@ -54,6 +54,11 @@ export function createPlacementGhost(curvature: CurvatureUniforms): PlacementGho
   // the ground they are about to change, not have it covered up.
   const ring = new THREE.Mesh(new THREE.RingGeometry(0.72, 1, 24), material);
   ring.rotation.x = -Math.PI / 2;
+  // Transparent, depth-write-off meshes paint in renderOrder sequence rather
+  // than by depth, so without this the ring loses to the river/pond water
+  // (renderOrder 1) and the flood plane (renderOrder 2) and reads as sunk
+  // beneath them even when it sits above the ground.
+  ring.renderOrder = 3;
   root.add(ring);
 
   // A short column so the marker is findable when the camera is low and the
@@ -62,6 +67,7 @@ export function createPlacementGhost(curvature: CurvatureUniforms): PlacementGho
   applyCurvature(pillarMaterial, curvature, "ghost");
   const pillar = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.12, 1.4, 6), pillarMaterial);
   pillar.position.y = 0.7;
+  pillar.renderOrder = 3;
   root.add(pillar);
 
   return {

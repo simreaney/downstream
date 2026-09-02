@@ -15,6 +15,7 @@ import type { GridSpec } from "../core/grid";
 import { createRng, splitSeed, type Rng } from "../core/rng";
 import { isLowPower } from "../config";
 import { LandCover } from "../scimap/constants";
+import type { Obstacle } from "../player/controller";
 import { leakyDam } from "../props/dam";
 import { cottageA, cottageB, fisheryHut } from "../props/building";
 import { fish } from "../props/fauna";
@@ -97,6 +98,8 @@ export interface Scatter {
   readonly conifer: InstancedBatch;
   readonly willow: InstancedBatch;
   readonly rock: InstancedBatch;
+  /** Footprints of the scattered boulders, solid like a building's. */
+  readonly rockObstacles: readonly Obstacle[];
   dispose(): void;
 }
 
@@ -171,17 +174,23 @@ export function scatterVegetation(
   const colour = new THREE.Color();
   const halfWidth = (spec.width * spec.cellSize) / 2;
   const halfHeight = (spec.height * spec.cellSize) / 2;
+  const rockObstacles: Obstacle[] = [];
+  const rockRadius = getProp("rock", context).radius;
 
+  /** Places an instance and returns the scale it was drawn at, for callers that need a footprint. */
   const place = (
     batch: InstancedBatch,
     x: number,
     z: number,
     scaleLow: number,
     scaleHigh: number,
-  ): void => {
-    if (batch.count >= batch.capacity) return;
+  ): number | null => {
+    if (batch.count >= batch.capacity) return null;
+    const rotation = rng.range(0, Math.PI * 2);
+    const scale = rng.range(scaleLow, scaleHigh);
     position.set(x, sampleHeight(dem, spec, x, z), z);
-    batch.add(position, rng.range(0, Math.PI * 2), rng.range(scaleLow, scaleHigh), tint(rng, colour));
+    batch.add(position, rotation, scale, tint(rng, colour));
+    return scale;
   };
 
   for (let row = 0; row < spec.height; row++) {
@@ -212,19 +221,17 @@ export function scatterVegetation(
       }
 
       if (rng.next() < rocks * DENSITY_SCALE) {
-        place(
-          batches.rock,
-          baseX + rng.range(-jitter, jitter),
-          baseZ + rng.range(-jitter, jitter),
-          0.7,
-          1.7,
-        );
+        const x = baseX + rng.range(-jitter, jitter);
+        const z = baseZ + rng.range(-jitter, jitter);
+        const scale = place(batches.rock, x, z, 0.7, 1.7);
+        if (scale !== null) rockObstacles.push({ x, z, radius: rockRadius * scale });
       }
     }
   }
 
   return {
     ...batches,
+    rockObstacles,
     dispose() {
       for (const batch of Object.values(batches)) batch.dispose();
     },

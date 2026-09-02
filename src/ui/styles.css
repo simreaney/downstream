@@ -293,9 +293,15 @@ kbd {
 .hydrograph__head {
   display: flex;
   justify-content: space-between;
+  align-items: center;
+  gap: 0.6rem;
+  margin-bottom: 0.35rem;
+}
+
+.hydrograph__heading {
+  display: flex;
   align-items: baseline;
   gap: 1rem;
-  margin-bottom: 0.35rem;
   font-size: 0.82rem;
   font-weight: 650;
 }
@@ -303,6 +309,21 @@ kbd {
 .hydrograph__stat {
   color: var(--accent-deep);
   font-variant-numeric: tabular-nums;
+}
+
+.hydrograph__close {
+  flex-shrink: 0;
+  width: 1.6rem;
+  height: 1.6rem;
+  border: none;
+  border-radius: 999px;
+  background: rgba(61, 50, 38, 0.1);
+  font: inherit;
+  font-size: 1rem;
+  line-height: 1.6rem;
+  text-align: center;
+  color: var(--ink-soft);
+  cursor: pointer;
 }
 
 .hydrograph__key {

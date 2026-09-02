@@ -17,8 +17,11 @@ import type { Hydrograph } from "../sim/storm";
 const MARKUP = `
   <div class="hydrograph" id="hydrograph" hidden>
     <div class="hydrograph__head">
-      <span id="hydrograph-title">Storm</span>
-      <span class="hydrograph__stat" id="hydrograph-stat"></span>
+      <div class="hydrograph__heading">
+        <span id="hydrograph-title">Storm</span>
+        <span class="hydrograph__stat" id="hydrograph-stat"></span>
+      </div>
+      <button class="hydrograph__close" id="hydrograph-close" type="button" aria-label="Close">&times;</button>
     </div>
     <canvas id="hydrograph-canvas" width="440" height="150"></canvas>
     <div class="hydrograph__key">
@@ -42,6 +45,7 @@ export function createHydrographChart(root: HTMLElement): HydrographChart {
   const panel = root.querySelector("#hydrograph") as HTMLElement;
   const title = root.querySelector("#hydrograph-title") as HTMLElement;
   const stat = root.querySelector("#hydrograph-stat") as HTMLElement;
+  const closeButton = root.querySelector("#hydrograph-close") as HTMLButtonElement;
   const canvas = root.querySelector("#hydrograph-canvas") as HTMLCanvasElement;
   const context = canvas.getContext("2d");
 
@@ -81,7 +85,7 @@ export function createHydrographChart(root: HTMLElement): HydrographChart {
     ctx.setLineDash([]);
   };
 
-  return {
+  const api: HydrographChart = {
     show(text) {
       title.textContent = text;
       panel.hidden = false;
@@ -144,4 +148,8 @@ export function createHydrographChart(root: HTMLElement): HydrographChart {
       panel.remove();
     },
   };
+
+  closeButton.addEventListener("click", () => api.hide());
+
+  return api;
 }

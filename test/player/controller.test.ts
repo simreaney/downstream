@@ -31,7 +31,7 @@ function walk(player: ReturnType<typeof createPlayer>, state: InputState): void 
 describe("createPlayer", () => {
   it("walks freely with nothing in the way", () => {
     const player = createPlayer(FLAT, SPEC, new THREE.Vector3(0, 0, 0));
-    walk(player, input(0, 1));
+    walk(player, input(0, -1));
     expect(player.position.z).toBeGreaterThan(5);
   });
 
@@ -40,7 +40,7 @@ describe("createPlayer", () => {
     const player = createPlayer(FLAT, SPEC, new THREE.Vector3(0, 0, 0), [house]);
 
     // Straight at it, long enough to have crossed it several times over.
-    walk(player, input(0, 1));
+    walk(player, input(0, -1));
 
     const distance = Math.hypot(player.position.x - house.x, player.position.z - house.z);
     expect(distance).toBeGreaterThanOrEqual(house.radius);
@@ -52,7 +52,7 @@ describe("createPlayer", () => {
     const house: Obstacle = { x: 0, z: 12, radius: 2.3 };
     const player = createPlayer(FLAT, SPEC, new THREE.Vector3(-1.5, 0, 0), [house]);
 
-    walk(player, input(0, 1));
+    walk(player, input(0, -1));
 
     // Pushed around the side rather than held on the centre line it started on.
     expect(Math.abs(player.position.x)).toBeGreaterThan(1.5);
@@ -67,14 +67,14 @@ describe("createPlayer", () => {
     const house: Obstacle = { x: 0, z: 0, radius: 3 };
     const player = createPlayer(FLAT, SPEC, new THREE.Vector3(0, 0, 0), [house]);
 
-    walk(player, input(0, 1));
+    walk(player, input(0, -1));
 
     expect(Math.hypot(player.position.x, player.position.z)).toBeGreaterThanOrEqual(house.radius);
   });
 
   it("keeps the player inside the catchment", () => {
     const player = createPlayer(FLAT, SPEC, new THREE.Vector3(0, 0, 0));
-    for (let frame = 0; frame < 600; frame++) player.update(input(0, 1), 0, 1 / 60);
+    for (let frame = 0; frame < 600; frame++) player.update(input(0, -1), 0, 1 / 60);
 
     const halfExtent = (SPEC.height * SPEC.cellSize) / 2;
     expect(player.position.z).toBeLessThanOrEqual(halfExtent);
