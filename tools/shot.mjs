@@ -71,7 +71,7 @@ try {
     console.error(`  page exception: ${error.stack ?? error.message}`);
   });
 
-  await page.goto(`http://localhost:${port}/diffusePollutionGame/?seed=${seed}`, {
+  await page.goto(`http://localhost:${port}/downstream/play/?seed=${seed}`, {
     waitUntil: "load",
   });
 

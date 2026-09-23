@@ -6,18 +6,847 @@
     <title>Downstream — a diffuse pollution game</title>
     <meta
       name="description"
-      content="Explore a procedurally generated catchment and repair it with ponds, leaky dams and riparian trees, guided by a live SCIMAP risk map."
+      content="Walk a procedurally generated river catchment and repair it with leaky dams, ponds and riparian trees, guided by SCIMAP, a diffuse-pollution risk model running live in your browser."
     />
-    <!-- Inline so there is no favicon request to 404 on a subpath deploy. -->
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="Downstream — a diffuse pollution game" />
+    <meta
+      property="og:description"
+      content="Repair a river catchment with leaky dams, ponds and trees, guided by a live SCIMAP risk map. Free, in the browser."
+    />
+    <meta property="og:url" content="https://simreaney.github.io/downstream/" />
+    <meta property="og:image" content="https://simreaney.github.io/downstream/media/hero.jpg" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="theme-color" content="#fdf6e3" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#1e1a15" media="(prefers-color-scheme: dark)" />
     <link
       rel="icon"
       href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><text y='26' font-size='26'>🏞️</text></svg>"
     />
-    <link rel="stylesheet" href="/src/ui/styles.css" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      rel="stylesheet"
+      href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,600;9..144,700&display=swap"
+    />
+    <style>
+      /* The game's own palette (src/ui/styles.css): cream paper, soft ink. */
+      :root {
+        --paper: #fdf6e3;
+        --paper-deep: #f5ecdc;
+        --card: #fffaf0;
+        --ink: #3d3226;
+        --ink-soft: #6b5c4a;
+        --line: rgba(61, 50, 38, 0.14);
+        --accent: #2f7d5c;
+        --accent-soft: #4fb286;
+        --on-accent: #fdf6e3;
+        --water: #3f7fb3;
+        --shadow: 0 4px 0 rgba(61, 50, 38, 0.18);
+        --shadow-lift: 0 6px 0 rgba(61, 50, 38, 0.18), 0 18px 40px -18px rgba(61, 50, 38, 0.35);
+        --radius: 14px;
+        --radius-lg: 20px;
+        --wash: 62%;
+        --display: "Fraunces", Georgia, "Times New Roman", serif;
+        --body: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+        color-scheme: light;
+      }
+      @media (prefers-color-scheme: dark) {
+        :root:not([data-theme="light"]) {
+          --paper: #1e1a15;
+          --paper-deep: #17140f;
+          --card: #28221b;
+          --ink: #f3ead7;
+          --ink-soft: #c2b49c;
+          --line: rgba(243, 234, 215, 0.14);
+          --accent: #5cc493;
+          --accent-soft: #5cc493;
+          --on-accent: #14241b;
+          --water: #8cc2ec;
+          --shadow: 0 4px 0 rgba(0, 0, 0, 0.35);
+          --shadow-lift: 0 6px 0 rgba(0, 0, 0, 0.35), 0 18px 40px -18px rgba(0, 0, 0, 0.6);
+          --wash: 74%;
+          color-scheme: dark;
+        }
+      }
+      :root[data-theme="dark"] {
+        --paper: #1e1a15;
+        --paper-deep: #17140f;
+        --card: #28221b;
+        --ink: #f3ead7;
+        --ink-soft: #c2b49c;
+        --line: rgba(243, 234, 215, 0.14);
+        --accent: #5cc493;
+        --accent-soft: #5cc493;
+        --on-accent: #14241b;
+        --water: #8cc2ec;
+        --shadow: 0 4px 0 rgba(0, 0, 0, 0.35);
+        --shadow-lift: 0 6px 0 rgba(0, 0, 0, 0.35), 0 18px 40px -18px rgba(0, 0, 0, 0.6);
+        --wash: 74%;
+        color-scheme: dark;
+      }
+
+      *,
+      *::before,
+      *::after {
+        box-sizing: border-box;
+      }
+      html {
+        scroll-behavior: smooth;
+      }
+      @media (prefers-reduced-motion: reduce) {
+        html {
+          scroll-behavior: auto;
+        }
+      }
+      body {
+        margin: 0;
+        background: var(--paper);
+        color: var(--ink);
+        font: 17px/1.6 var(--body);
+        -webkit-font-smoothing: antialiased;
+      }
+      img,
+      video {
+        display: block;
+        max-width: 100%;
+        /* The width and height attributes reserve space before load; without
+           this their height would override aspect-ratio and stretch the image. */
+        height: auto;
+      }
+      a {
+        color: var(--accent);
+        text-underline-offset: 0.18em;
+      }
+      a:hover {
+        text-decoration-thickness: 2px;
+      }
+      :focus-visible {
+        outline: 3px solid var(--accent-soft);
+        outline-offset: 3px;
+        border-radius: 6px;
+      }
+      h1,
+      h2,
+      h3 {
+        font-family: var(--display);
+        font-weight: 700;
+        line-height: 1.1;
+        letter-spacing: -0.01em;
+        text-wrap: balance;
+        margin: 0;
+      }
+      p {
+        margin: 0;
+        text-wrap: pretty;
+      }
+      kbd {
+        display: inline-block;
+        min-width: 1.7em;
+        padding: 0.05em 0.45em;
+        border-radius: 6px;
+        background: var(--card);
+        border: 1px solid var(--line);
+        box-shadow: 0 2px 0 var(--line);
+        font: 600 0.82em/1.5 var(--body);
+        text-align: center;
+        color: var(--ink);
+      }
+      .wrap {
+        width: min(1120px, 100% - 32px);
+        margin-inline: auto;
+      }
+      .eyebrow {
+        font: 700 0.78rem/1 var(--body);
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+        color: var(--accent);
+        margin-bottom: 14px;
+      }
+
+      /* Buttons borrow the HUD's chip: rounded, with a hard drop shadow. */
+      .button {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.55em;
+        padding: 0.8em 1.3em;
+        border-radius: var(--radius);
+        font: 650 1rem/1 var(--body);
+        text-decoration: none;
+        box-shadow: var(--shadow);
+        transition: transform 120ms ease, box-shadow 120ms ease;
+      }
+      .button:hover {
+        transform: translateY(-1px);
+        box-shadow: var(--shadow-lift);
+      }
+      .button:active {
+        transform: translateY(3px);
+        box-shadow: none;
+      }
+      .button--primary {
+        background: var(--accent);
+        color: var(--on-accent);
+      }
+      .button--quiet {
+        background: var(--card);
+        color: var(--ink);
+      }
+      .button svg {
+        width: 1.1em;
+        height: 1.1em;
+        flex: none;
+      }
+
+      /* Hero: the establishing orbit, full bleed, with the title over it. */
+      .hero {
+        position: relative;
+        min-height: min(88vh, 860px);
+        display: grid;
+        align-items: end;
+        overflow: hidden;
+        background: #cfe2a6;
+        isolation: isolate;
+      }
+      .hero__media {
+        position: absolute;
+        inset: 0;
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+        z-index: -2;
+      }
+      /* A wash of paper under the title, so it reads over any frame of the loop. */
+      .hero::after {
+        content: "";
+        position: absolute;
+        inset: 0;
+        z-index: -1;
+        background:
+          linear-gradient(to top, var(--paper) 0%, color-mix(in srgb, var(--paper) 80%, transparent) 26%, transparent 62%),
+          linear-gradient(
+            to right,
+            color-mix(in srgb, var(--paper) var(--wash), transparent) 0%,
+            color-mix(in srgb, var(--paper) calc(var(--wash) * 0.6), transparent) 34%,
+            transparent 60%
+          );
+      }
+      .hero__content {
+        padding-block: 120px 56px;
+      }
+      .hero h1 {
+        font-size: clamp(3.2rem, 9vw, 6.5rem);
+      }
+      .hero__tagline {
+        margin-top: 10px;
+        font: 600 clamp(1.15rem, 2.4vw, 1.5rem) / 1.3 var(--display);
+        color: var(--ink-soft);
+      }
+      .hero__pitch {
+        margin-top: 18px;
+        max-width: 36em;
+        font-size: 1.08rem;
+      }
+      .hero__actions {
+        margin-top: 28px;
+        display: flex;
+        flex-wrap: wrap;
+        gap: 12px;
+      }
+      .hero__note {
+        margin-top: 16px;
+        font-size: 0.9rem;
+        color: var(--ink-soft);
+      }
+
+      section {
+        padding-block: 88px;
+      }
+      .section-head {
+        max-width: 40em;
+        margin-bottom: 40px;
+      }
+      .section-head h2 {
+        font-size: clamp(2rem, 4.5vw, 2.9rem);
+      }
+      .section-head p {
+        margin-top: 14px;
+        color: var(--ink-soft);
+        font-size: 1.08rem;
+      }
+
+      .frame {
+        border-radius: var(--radius-lg);
+        overflow: hidden;
+        background: var(--paper-deep);
+        box-shadow: var(--shadow-lift);
+      }
+      .trailer video {
+        width: 100%;
+        aspect-ratio: 16 / 9;
+        background: #cfe2a6;
+      }
+      .trailer figcaption {
+        margin-top: 14px;
+        color: var(--ink-soft);
+        font-size: 0.95rem;
+      }
+
+      /* How it plays: alternating rows of screenshot and text. */
+      .features {
+        display: grid;
+        gap: 72px;
+      }
+      .feature {
+        display: grid;
+        grid-template-columns: 1.35fr 1fr;
+        gap: 44px;
+        align-items: center;
+      }
+      .feature:nth-child(even) {
+        grid-template-columns: 1fr 1.35fr;
+      }
+      .feature:nth-child(even) .feature__shot {
+        order: 2;
+      }
+      .feature__shot {
+        display: block;
+        cursor: zoom-in;
+      }
+      .feature__shot img {
+        width: 100%;
+        aspect-ratio: 16 / 9;
+        object-fit: cover;
+        transition: transform 300ms ease;
+      }
+      .feature__shot:hover img {
+        transform: scale(1.015);
+      }
+      .feature__step {
+        font: 700 0.82rem/1 var(--body);
+        color: var(--accent);
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+      }
+      .feature h3 {
+        margin-top: 10px;
+        font-size: clamp(1.5rem, 3vw, 2rem);
+      }
+      .feature p {
+        margin-top: 14px;
+      }
+      .feature p + p {
+        margin-top: 10px;
+      }
+
+      .band {
+        background: var(--paper-deep);
+      }
+      .science {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 20px;
+      }
+      .card {
+        background: var(--card);
+        border-radius: var(--radius-lg);
+        padding: 26px 24px;
+        box-shadow: var(--shadow);
+      }
+      .card h3 {
+        font-size: 1.3rem;
+      }
+      .card p {
+        margin-top: 10px;
+        font-size: 0.98rem;
+      }
+      .science__more {
+        margin-top: 28px;
+        color: var(--ink-soft);
+      }
+      code {
+        font: 0.9em/1.4 ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+        background: var(--card);
+        border: 1px solid var(--line);
+        border-radius: 6px;
+        padding: 0.05em 0.35em;
+        white-space: nowrap;
+      }
+
+      .controls {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 44px;
+        align-items: start;
+      }
+      .table-scroll {
+        overflow-x: auto;
+      }
+      table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 0.96rem;
+      }
+      th,
+      td {
+        text-align: left;
+        padding: 10px 12px 10px 0;
+        border-bottom: 1px solid var(--line);
+        vertical-align: top;
+      }
+      th {
+        font: 700 0.78rem/1.2 var(--body);
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        color: var(--ink-soft);
+      }
+      td:first-child,
+      td:nth-child(2) {
+        white-space: nowrap;
+      }
+      .aside p + p {
+        margin-top: 14px;
+      }
+      .aside h3 {
+        font-size: 1.3rem;
+        margin-bottom: 10px;
+      }
+      .aside h3 + p {
+        margin-top: 0;
+      }
+      .aside * + h3 {
+        margin-top: 32px;
+      }
+
+      .cta {
+        text-align: center;
+      }
+      .cta h2 {
+        font-size: clamp(2rem, 5vw, 3.2rem);
+      }
+      .cta p {
+        margin: 14px auto 0;
+        max-width: 34em;
+        color: var(--ink-soft);
+      }
+      .cta .hero__actions {
+        justify-content: center;
+      }
+
+      footer {
+        border-top: 1px solid var(--line);
+        padding-block: 28px 40px;
+        color: var(--ink-soft);
+        font-size: 0.92rem;
+      }
+      footer .wrap {
+        display: flex;
+        flex-wrap: wrap;
+        justify-content: space-between;
+        gap: 12px 24px;
+      }
+      footer nav {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px 20px;
+      }
+
+      /* Lightbox for the screenshots. */
+      dialog.lightbox {
+        padding: 0;
+        border: 0;
+        background: transparent;
+        max-width: min(1600px, 96vw);
+        width: 100%;
+      }
+      dialog.lightbox::backdrop {
+        background: rgba(23, 20, 15, 0.82);
+      }
+      dialog.lightbox img {
+        width: 100%;
+        height: auto;
+        max-height: 88vh;
+        object-fit: contain;
+        border-radius: var(--radius);
+      }
+      dialog.lightbox p {
+        margin-top: 10px;
+        text-align: center;
+        color: #f3ead7;
+        font-size: 0.95rem;
+      }
+      dialog.lightbox button {
+        position: absolute;
+        top: 10px;
+        right: 10px;
+        width: 40px;
+        height: 40px;
+        border-radius: 50%;
+        border: 0;
+        background: rgba(253, 246, 227, 0.92);
+        color: #3d3226;
+        font-size: 1.4rem;
+        line-height: 1;
+        cursor: pointer;
+        box-shadow: 0 3px 0 rgba(0, 0, 0, 0.25);
+      }
+
+      @media (max-width: 860px) {
+        section {
+          padding-block: 64px;
+        }
+        .feature,
+        .feature:nth-child(even) {
+          grid-template-columns: 1fr;
+          gap: 22px;
+        }
+        .feature:nth-child(even) .feature__shot {
+          order: 0;
+        }
+        .features {
+          gap: 56px;
+        }
+        .science,
+        .controls {
+          grid-template-columns: 1fr;
+        }
+        /* Too narrow for text over video in both themes: the loop becomes a
+           banner, and the title sits on paper beneath it. */
+        .hero {
+          display: block;
+          min-height: 0;
+          background: var(--paper);
+        }
+        .hero__media {
+          position: relative;
+          height: auto;
+          aspect-ratio: 4 / 3;
+        }
+        .hero::after {
+          inset: auto 0 auto 0;
+          top: 0;
+          aspect-ratio: 4 / 3;
+          background: linear-gradient(to top, var(--paper) 0%, transparent 28%);
+        }
+        .hero__content {
+          padding-block: 4px 48px;
+        }
+      }
+    </style>
   </head>
   <body>
-    <canvas id="viewport"></canvas>
-    <div id="ui-root"></div>
-    <script type="module" src="/src/main.ts"></script>
+    <header class="hero">
+      <video
+        class="hero__media"
+        src="/media/hero.mp4"
+        poster="/media/hero-poster.jpg"
+        autoplay
+        muted
+        loop
+        playsinline
+        preload="auto"
+        aria-hidden="true"
+        tabindex="-1"
+      ></video>
+      <div class="wrap hero__content">
+        <h1>Downstream</h1>
+        <p class="hero__tagline">A diffuse pollution game</p>
+        <p class="hero__pitch">
+          Walk a procedurally generated river catchment and repair it: plant riparian trees, dig
+          ponds and build leaky wooden dams. The risk map you work from isn’t decoration. It’s
+          SCIMAP, a real diffuse-pollution model, re-solving on the terrain every time you build.
+        </p>
+        <div class="hero__actions">
+          <a class="button button--primary" href="play/">
+            <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M8 5.5v13a1 1 0 0 0 1.5.86l10.4-6.5a1 1 0 0 0 0-1.72L9.5 4.64A1 1 0 0 0 8 5.5Z" /></svg>
+            Play in your browser
+          </a>
+          <a class="button button--quiet" href="#trailer">Watch the trailer</a>
+        </div>
+        <p class="hero__note">Free, in the browser, nothing to install. Works with a keyboard and mouse or any game controller.</p>
+      </div>
+    </header>
+
+    <main>
+      <section id="trailer">
+        <div class="wrap">
+          <div class="section-head">
+            <p class="eyebrow">Trailer</p>
+            <h2>See it in motion</h2>
+          </div>
+          <figure class="trailer" style="margin: 0">
+            <div class="frame">
+              <video
+                controls
+                playsinline
+                preload="metadata"
+                poster="/media/trailer-poster.jpg"
+                aria-label="Downstream gameplay trailer"
+              >
+                <source src="/media/trailer.mp4" type="video/mp4" />
+                <a href="media/trailer.mp4">Download the trailer (MP4)</a>
+              </video>
+            </div>
+            <figcaption>
+              A walk down to a tributary: the risk map, a leaky dam, a riparian buffer and an offline
+              pond, then a 1-in-30 design storm through a catchment that’s partway through repair.
+              Recorded from the browser build, no sound.
+            </figcaption>
+          </figure>
+        </div>
+      </section>
+
+      <section id="how" class="band">
+        <div class="wrap">
+          <div class="section-head">
+            <p class="eyebrow">How it plays</p>
+            <h2>Read the land, then change it</h2>
+            <p>
+              Each catchment is generated from a seed: ridges, valleys, a river network, fields,
+              woods, a village and a fishery downstream. It’s losing soil to its river, and you have
+              three tools to fix that.
+            </p>
+          </div>
+
+          <div class="features">
+            <article class="feature">
+              <a class="feature__shot frame" href="media/risk.jpg" data-caption="The source-risk layer of the SCIMAP map">
+                <img src="/media/risk-960.jpg" srcset="/media/risk-960.jpg 960w, /media/risk.jpg 1920w" sizes="(max-width: 860px) 100vw, 640px" width="1920" height="1080" loading="lazy" alt="The village and its streams under the source-risk overlay: purple where risk is low, bright yellow and orange where erodible ground is connected to the water." />
+              </a>
+              <div>
+                <p class="feature__step">1 · The map</p>
+                <h3>Find where the sediment comes from</h3>
+                <p>
+                  Press <kbd>M</kbd> for the risk map. Bright ground is both erodible <em>and</em>
+                  connected to a watercourse, and that’s where sediment reaches the river. Cycle
+                  through source risk, connectivity, erosion and in-channel risk to see why.
+                </p>
+              </div>
+            </article>
+
+            <article class="feature">
+              <a class="feature__shot frame" href="media/dam.jpg" data-caption="Lining up a leaky dam on a headwater stream">
+                <img src="/media/dam-960.jpg" srcset="/media/dam-960.jpg 960w, /media/dam.jpg 1920w" sizes="(max-width: 860px) 100vw, 640px" width="1920" height="1080" loading="lazy" alt="The player standing in a small stream, lining up a leaky dam. The readout above says how much land drains through the spot." />
+              </a>
+              <div>
+                <p class="feature__step">2 · Build</p>
+                <h3>Put each fix where it counts</h3>
+                <p>
+                  Leaky dams go in small headwater streams, ponds in hollows off the channel, and
+                  trees on the bright ground beside the water. Before you commit, the readout tells
+                  you how much land drains through the spot. If the answer is “almost nothing”, it
+                  says so.
+                </p>
+                <p>Gather wood and stone as you go, and find the spade before you can dig.</p>
+              </div>
+            </article>
+
+            <article class="feature">
+              <a class="feature__shot frame" href="media/trees.jpg" data-caption="Planting a riparian buffer beside the stream">
+                <img src="/media/trees-960.jpg" srcset="/media/trees-960.jpg 960w, /media/trees.jpg 1920w" sizes="(max-width: 860px) 100vw, 640px" width="1920" height="1080" loading="lazy" alt="Young trees planted on a stream bank, with the next planting spot highlighted." />
+              </a>
+              <div>
+                <p class="feature__step">3 · Watch it respond</p>
+                <h3>Upstream work shows up downstream</h3>
+                <p>
+                  Every tree, pond and dam re-runs the model, so the map and the colour of the river
+                  change the moment you build. It doesn’t flatter you, either: under the model’s
+                  land-cover weights, planting trees on rough grazing makes erosion slightly worse.
+                  The game lets you do it, and tells you.
+                </p>
+              </div>
+            </article>
+
+            <article class="feature">
+              <a class="feature__shot frame" href="media/result.jpg" data-caption="The flood hydrograph after a 1-in-30 design storm">
+                <img src="/media/result-960.jpg" srcset="/media/result-960.jpg 960w, /media/result.jpg 1920w" sizes="(max-width: 860px) 100vw, 640px" width="1920" height="1080" loading="lazy" alt="After a storm: a hydrograph comparing river flow with and without the player's work, and a message reporting the cut in peak flow." />
+              </a>
+              <div>
+                <p class="feature__step">4 · Test it</p>
+                <h3>Send a storm through</h3>
+                <p>
+                  Press <kbd>R</kbd> to run a 1-in-30 design storm. The hydrograph plots the flood
+                  peak with your work against the same storm without it, and the village and the
+                  fishery respond to the difference. Smaller storms arrive on their own, too.
+                </p>
+              </div>
+            </article>
+
+            <article class="feature">
+              <a class="feature__shot frame" href="media/map.jpg" data-caption="The catchment overview map">
+                <img src="/media/map-960.jpg" srcset="/media/map-960.jpg 960w, /media/map.jpg 1920w" sizes="(max-width: 860px) 100vw, 640px" width="1920" height="1080" loading="lazy" alt="The catchment overview map: a shaded relief of the whole landscape with the stream network, the village, the fishery and resource markers." />
+              </a>
+              <div>
+                <p class="feature__step">5 · Plan</p>
+                <h3>See the whole catchment</h3>
+                <p>
+                  <kbd>Tab</kbd> opens the overview: the drainage network from the ridges to the
+                  outlet, the village and the fishery, and where to find wood, stone and the spade.
+                  The risk layers show here too.
+                </p>
+              </div>
+            </article>
+          </div>
+        </div>
+      </section>
+
+      <section id="science">
+        <div class="wrap">
+          <div class="section-head">
+            <p class="eyebrow">The model</p>
+            <h2>A real risk map, not a decorative one</h2>
+            <p>
+              SCIMAP maps where diffuse pollution is likely to come from by combining two things:
+              how erodible the land is, and how well each point is connected to the river when the
+              ground is wet. Downstream runs it live, in a Web Worker, on the terrain you’re walking
+              over.
+            </p>
+          </div>
+          <div class="science">
+            <div class="card">
+              <h3>Faithful where it’s specified</h3>
+              <p>
+                The wetness index, the Network Index, FD8 flow routing and the percentile stretch
+                are transcribed from the reference implementation, with the formulas kept verbatim.
+              </p>
+            </div>
+            <div class="card">
+              <h3>Honest where it departs</h3>
+              <p>
+                There are three deliberate changes: a single-sweep Network Index, in-channel risk
+                accumulated along the flow path, and stretch bounds frozen at the start so that
+                improvement shows as improvement. Each one is argued in the code.
+              </p>
+            </div>
+            <div class="card">
+              <h3>A save is a link</h3>
+              <p>
+                Generation is exactly reproducible, so a save is just a seed and a list of what you
+                built. That’s a few hundred bytes. Press <kbd>K</kbd> to copy a link that rebuilds
+                your catchment for anyone.
+              </p>
+            </div>
+          </div>
+          <p class="science__more">
+            The reasoning, and the bugs that looked plausible while being wrong, are written up in
+            <a href="https://github.com/simreaney/downstream/blob/main/DESIGN.md">DESIGN.md</a>.
+            More on SCIMAP itself is on the
+            <a href="https://simreaney.github.io/portfolio/scimap/">SCIMAP project page</a>.
+          </p>
+        </div>
+      </section>
+
+      <section id="controls" class="band">
+        <div class="wrap controls">
+          <div>
+            <div class="section-head" style="margin-bottom: 24px">
+              <p class="eyebrow">Controls</p>
+              <h2>Keyboard or gamepad</h2>
+            </div>
+            <div class="table-scroll">
+              <table>
+                <thead>
+                  <tr><th scope="col">Keys</th><th scope="col">Gamepad</th><th scope="col">Does</th></tr>
+                </thead>
+                <tbody>
+                  <tr><td><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd></td><td>Left stick</td><td>Walk (<kbd>Shift</kbd> to run); drag or right stick to look</td></tr>
+                  <tr><td><kbd>1</kbd> <kbd>2</kbd> <kbd>3</kbd></td><td>D-pad</td><td>Plant, leaky dam, pond</td></tr>
+                  <tr><td><kbd>F</kbd></td><td>A</td><td>Build where you’re facing</td></tr>
+                  <tr><td><kbd>E</kbd></td><td>B</td><td>Gather wood, stone or the spade</td></tr>
+                  <tr><td><kbd>M</kbd> / <kbd>N</kbd></td><td>X / Back</td><td>Next risk layer / overlay off</td></tr>
+                  <tr><td><kbd>Tab</kbd></td><td>Y</td><td>Catchment overview map</td></tr>
+                  <tr><td><kbd>R</kbd></td><td>RT</td><td>Run a 1-in-30 design storm</td></tr>
+                  <tr><td><kbd>Z</kbd></td><td>D-pad left</td><td>Undo the last feature</td></tr>
+                  <tr><td><kbd>K</kbd></td><td>Start</td><td>Save, and copy a share link</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+          <div class="aside">
+            <h3>Any controller works</h3>
+            <p>
+              Bluetooth or USB, Xbox or PlayStation: the browser maps them all onto the same layout.
+              Connect it and press a button once to wake it up.
+            </p>
+            <h3>For teaching</h3>
+            <p>
+              The same seed always builds the same catchment, so a class can all work on one
+              landscape. Add <code>?seed=132</code> to the play link, and
+              <code>?size=small</code> or <code>large</code> to change how big it is.
+            </p>
+            <p>
+              <a href="play/?seed=132">Open catchment 132</a>, the one in the trailer.
+            </p>
+            <h3>What it runs on</h3>
+            <p>
+              Any recent desktop browser with WebGL. It’s built for a laptop or desktop: on a phone
+              you can look around, but you’ll need a controller to walk.
+            </p>
+          </div>
+        </div>
+      </section>
+
+      <section class="cta">
+        <div class="wrap">
+          <h2>The river’s waiting</h2>
+          <p>No install and no account. Your catchment is generated in a second or two.</p>
+          <div class="hero__actions">
+            <a class="button button--primary" href="play/">
+              <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M8 5.5v13a1 1 0 0 0 1.5.86l10.4-6.5a1 1 0 0 0 0-1.72L9.5 4.64A1 1 0 0 0 8 5.5Z" /></svg>
+              Play Downstream
+            </a>
+            <a class="button button--quiet" href="https://github.com/simreaney/downstream">Source on GitHub</a>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <footer>
+      <div class="wrap">
+        <p>Downstream is by <a href="https://simreaney.github.io/">Sim Reaney</a>, Department of Geography, Durham University.</p>
+        <nav aria-label="Footer">
+          <a href="play/">Play</a>
+          <a href="https://github.com/simreaney/downstream">GitHub</a>
+          <a href="https://github.com/simreaney/downstream/blob/main/DESIGN.md">Design notes</a>
+        </nav>
+      </div>
+    </footer>
+
+    <dialog class="lightbox" aria-label="Screenshot">
+      <button type="button" aria-label="Close">×</button>
+      <img alt="" />
+      <p></p>
+    </dialog>
+
+    <script type="module">
+      // The hero loop is decoration; anyone who has asked for less motion gets
+      // its first frame instead.
+      const hero = document.querySelector(".hero__media");
+      const still = window.matchMedia("(prefers-reduced-motion: reduce)");
+      const settle = () => (still.matches ? hero.pause() : hero.play().catch(() => {}));
+      still.addEventListener("change", settle);
+      settle();
+
+      // Screenshots open full size in a lightbox. They are plain links, so
+      // without this script they still open the image.
+      const box = document.querySelector("dialog.lightbox");
+      const image = box.querySelector("img");
+      const caption = box.querySelector("p");
+      for (const link of document.querySelectorAll(".feature__shot")) {
+        link.addEventListener("click", (event) => {
+          if (event.metaKey || event.ctrlKey || event.shiftKey) return;
+          event.preventDefault();
+          const thumb = link.querySelector("img");
+          image.src = link.href;
+          image.alt = thumb.alt;
+          caption.textContent = link.dataset.caption ?? "";
+          box.showModal();
+        });
+      }
+      box.querySelector("button").addEventListener("click", () => box.close());
+      box.addEventListener("click", (event) => {
+        if (event.target === box) box.close();
+      });
+    </script>
   </body>
 </html>

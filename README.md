@@ -6,7 +6,11 @@ wooden dams. The risk map you work from is not decorative — it is **SCIMAP**,
 running live on the generated topography, re-solving every time you place
 something.
 
-Play: `?seed=20260809` loads a specific catchment; the same seed always rebuilds
+Play at <https://simreaney.github.io/downstream/play/>, or start from the
+[project page](https://simreaney.github.io/downstream/), which has the trailer
+and screenshots.
+
+`?seed=20260809` loads a specific catchment; the same seed always rebuilds
 the same world. `?size=small|medium|large` picks how big a catchment to
 generate (defaults to medium, the shipped 1024 m grid).
 
@@ -34,25 +38,34 @@ only report a gamepad after its first input.
 
 ```
 npm install
-npm run dev        # local dev server
+npm run dev        # local dev server: landing page at /downstream/, game at /downstream/play/
 npm test           # unit and parity tests
 npm run typecheck
 npm run lint:hotpath
 npm run build
 ```
 
-Two extra harnesses, run explicitly rather than in CI:
+Extra harnesses, run explicitly rather than in CI:
 
 ```
 npx vitest run tools/preview.test.ts   # renders terrain and risk layers to PNG
 npx vitest run tools/bench.test.ts     # times the recompute tiers
-node tools/shot.mjs --keys "ffm"       # screenshots the running game
+node tools/shot.mjs --keys "ffm"       # screenshots the running game (after npm run build)
+node tools/record.mjs                  # re-records the trailer and screenshots
 ```
 
 `tools/shot.mjs` drives the locally installed Chrome through `playwright-core`.
 It exists because the render layer cannot be checked against arrays: an inverted
 curvature shader or an overlay that replaces the terrain instead of tinting it
 both typecheck perfectly and are obvious in a picture.
+
+`tools/record.mjs` plays a scripted session: an establishing orbit, the risk
+map, a leaky dam, a riparian buffer, a pond, and a design storm. It writes the
+landing page's `hero.mp4`, `trailer.mp4`, posters and screenshots into
+`public/media/`. It picks every build site with the game's own placement rules,
+so it keeps working when terrain generation changes. Re-run it after a visible
+change to the game. It needs `ffmpeg` on the `PATH`, and a GPU for a smooth
+60 fps capture; on a Mac, headless Chrome gets one.
 
 ## How it fits together
 
@@ -111,8 +124,13 @@ else, and on comparator sorts in the compute path.
 
 ## Deploying
 
-`npm run build` emits to `dist/`, and `.github/workflows/deploy.yml` publishes it
-to GitHub Pages on a push to `main`. `base` in `vite.config.ts` must match the
-repository subpath — a missing `base` breaks every asset, most visibly the module
-worker, which 404s and leaves the game on the loading screen with nothing useful
-in the console.
+`npm run build` emits two pages to `dist/`: the landing page at the root and the
+game under `play/`. `public/media/` is copied across unhashed, so the trailer
+has a stable URL that other sites can embed. `.github/workflows/deploy.yml`
+publishes `dist/` to GitHub Pages on a push to `main`. For that, the repository's
+Pages source must be set to **GitHub Actions**, not to a branch. Served from
+the branch, Pages publishes the unbuilt `index.html`, which loads nothing.
+
+`base` in `vite.config.ts` must match the repository subpath, `/downstream/`. A
+wrong `base` breaks every asset, most visibly the module worker, which 404s and
+leaves the game on the loading screen with nothing useful in the console.

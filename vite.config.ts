@@ -3,19 +3,26 @@ import { defineConfig } from "vite";
 /**
  * Build configuration.
  *
- * `base` must be set from the very first commit. The deploy target is GitHub
- * Pages under a repository subpath, and a missing `base` breaks every asset URL
- * — most visibly the module worker, which 404s and leaves the game stuck on the
- * loading screen with no console error that points at the cause. Change the
- * string here (and nowhere else) if this is ever served from a domain root or
- * from a folder inside simreaney.github.io.
+ * `base` must match the repository name. The deploy target is GitHub Pages
+ * under a repository subpath, and a wrong `base` breaks every asset URL — most
+ * visibly the module worker, which 404s and leaves the game stuck on the
+ * loading screen with no console error that points at the cause. It was
+ * `/diffusePollutionGame/` until the repository was renamed, and the stale
+ * value left the deployed game unreachable. Change the string here (and
+ * nowhere else) if this is ever served from a domain root or from a folder
+ * inside simreaney.github.io.
+ *
+ * Two pages: `index.html` is the landing page with the trailer and
+ * screenshots, and `play/index.html` is the game. The landing page's media
+ * lives in `public/media/`, which Vite copies across unhashed so the personal
+ * site can link to it by a stable URL.
  *
  * `worker.format: "es"` is required because the simulation worker is spawned as
  * `new Worker(url, { type: "module" })`. Vite's default worker format is iife,
  * which cannot carry the static imports the worker relies on.
  */
 export default defineConfig({
-  base: "/diffusePollutionGame/",
+  base: "/downstream/",
   worker: {
     format: "es",
   },
@@ -23,6 +30,10 @@ export default defineConfig({
     target: "es2022",
     sourcemap: true,
     rollupOptions: {
+      input: {
+        landing: "index.html",
+        play: "play/index.html",
+      },
       output: {
         // three changes far less often than the game does, so keeping it in its
         // own chunk means a gameplay tweak invalidates a few kilobytes rather
