@@ -38,9 +38,19 @@ import type { GridSpec } from "../core/grid";
 import type { ReachDto } from "../worker/protocol";
 import { sampleHeight } from "./terrainMesh";
 
-/** Half-width in metres at the channel head, and at the catchment outlet. */
-const HALF_WIDTH_MIN = 0.7;
-const HALF_WIDTH_MAX = 2.6;
+/**
+ * Half-width in metres at the channel head, and at the catchment outlet.
+ *
+ * The head is wider than hydraulic geometry alone would put it. A 1.4 m stream
+ * is honest for a channel that has just initiated, and from a third-person
+ * camera twelve metres back it is a thread a couple of pixels across that the
+ * eye reads as a seam in the grass — which matters because a leaky dam is only
+ * legal *in* a watercourse, so a player who cannot see one cannot place one.
+ * Widening the head end trades a little realism at the top of the network for a
+ * channel the player can walk to, and leaves the trunk alone.
+ */
+export const HALF_WIDTH_MIN = 1.5;
+export const HALF_WIDTH_MAX = 3.1;
 
 /** Lift above the ground, in metres, to stop the ribbon z-fighting the terrain. */
 const SURFACE_LIFT = 0.12;

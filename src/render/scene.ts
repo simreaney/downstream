@@ -24,6 +24,7 @@ import {
   createTerrainMaterial,
   type TerrainMaterial,
 } from "./terrainMaterial";
+import { bakeTerrainData } from "./terrainData";
 import { createFloodPlane, type FloodPlane } from "./floodPlane";
 import { createPondSurfaces, type PondSurfaces } from "./pondMesh";
 import { createRiverMesh, type RiverMesh } from "./riverMesh";
@@ -87,10 +88,12 @@ export function buildWorldScene(
 
   const landCoverTexture = createLandCoverTexture(world.arrays.landCover, spec);
   const overlayTexture = createOverlayTexture(world.overlay, spec);
+  const terrainData = bakeTerrainData(world.arrays.dem, world.arrays.accum, spec);
 
   const terrainMaterial = createTerrainMaterial({
     landCover: landCoverTexture,
     overlay: overlayTexture,
+    terrainData: terrainData.texture,
     gradientMap,
     curvature,
     spec,
@@ -200,10 +203,18 @@ export function buildWorldScene(
   // Hidden until the water is clear enough for anything to live in it.
   fishBatch.setVisibleCount(0);
 
-  // Fog matched to the sky's horizon colour, starting beyond the far divide so
-  // it softens the very edge of the catchment without hazing the playfield.
+  // Aerial perspective, matched to the sky's horizon colour.
+  //
+  // Exponential rather than the linear fog this started as, and reaching well
+  // into the playfield rather than sitting beyond the far divide. Linear fog has
+  // to choose between touching the middle distance and blanking the far one,
+  // because it runs from nothing to total over its range; the squared
+  // exponential is nearly nothing up close and never quite total, which is both
+  // what haze does and what the depth cue needs. A density of one reciprocal
+  // catchment-width puts about a fifth of the horizon colour over ground 500 m
+  // off and leaves the far divide reading as distance rather than as a cut.
   const extent = spec.width * spec.cellSize;
-  scene.fog = new THREE.Fog(0xcfe9f5, extent * 0.55, extent * 1.15);
+  scene.fog = new THREE.FogExp2(0xcfe9f5, 1 / extent);
   sky.setStorminess(0);
 
   return {
@@ -264,6 +275,7 @@ export function buildWorldScene(
       terrainMaterial.material.dispose();
       landCoverTexture.dispose();
       overlayTexture.dispose();
+      terrainData.dispose();
       gradientMap.dispose();
     },
   };

@@ -94,6 +94,47 @@ export const COVER_COLOURS: Record<LandCover, [number, number, number]> = {
  */
 const JITTER = 0.028;
 
+/**
+ * What damp ground multiplies its colour by, at full wetness.
+ *
+ * Darker, and green rather than yellow — the red channel gives up the most and
+ * the green the least, which is how wet grass differs from dry in the field
+ * rather than simply being a shadow. It has to survive the toon ramp flattening
+ * everything it sits under, so it is a stronger multiply than it looks: at a
+ * channel head the corridor needs to be findable from a hundred metres away,
+ * because finding one is a thing the game actually asks the player to do.
+ */
+const DAMP_TINT: [number, number, number] = [0.74, 0.88, 0.84];
+
+/**
+ * How much of its sky fill a fully enclosed hollow gives up.
+ *
+ * Applied to the indirect term only, which is the hemisphere light standing in
+ * for sky and bounce — the quantity sky-view openness actually describes.
+ */
+const AO_INDIRECT = 0.55;
+
+/**
+ * How much of the *sun* the same hollow gives up.
+ *
+ * Not physical: direct sun is either blocked or it is not, and the shadow map
+ * already answers that. But the shadow map only covers 55 m around the player,
+ * so past that the question goes unanswered and every distant hillside comes
+ * back flat. A quarter of the occlusion term on direct light is enough to put
+ * the landform back into the middle distance, and small enough not to read as
+ * a second, softer sun.
+ */
+const AO_DIRECT = 0.25;
+
+/**
+ * What both terms fall to under the risk overlay.
+ *
+ * The overlay is the one layer meant to be read as a number. Shading a hollow
+ * darker than a spur lays a second gradient over it that is not risk, and the
+ * player has no way to tell the two apart.
+ */
+const AO_OVERLAY_RELIEF = 0.3;
+
 export function createLandCoverTexture(
   landCover: Uint8Array,
   spec: GridSpec,
@@ -165,6 +206,8 @@ export interface TerrainMaterial {
 export interface TerrainMaterialOptions {
   readonly landCover: THREE.Texture;
   readonly overlay: THREE.Texture;
+  /** Sky-view openness in red, wetness in green. See `terrainData.ts`. */
+  readonly terrainData: THREE.Texture;
   readonly gradientMap: THREE.Texture;
   readonly curvature: CurvatureUniforms;
   /** The grid the textures are on, so detail can be sized in metres. */
@@ -174,6 +217,7 @@ export interface TerrainMaterialOptions {
 export function createTerrainMaterial(options: TerrainMaterialOptions): TerrainMaterial {
   const uOverlay = { value: options.overlay };
   const uOverlayMix = { value: 0 };
+  const uTerrainData = { value: options.terrainData };
 
   const material = new THREE.MeshToonMaterial({
     map: options.landCover,
@@ -187,6 +231,7 @@ export function createTerrainMaterial(options: TerrainMaterialOptions): TerrainM
   material.onBeforeCompile = (shader) => {
     shader.uniforms.uOverlay = uOverlay;
     shader.uniforms.uOverlayMix = uOverlayMix;
+    shader.uniforms.uTerrainData = uTerrainData;
 
     shader.fragmentShader = shader.fragmentShader
       .replace(
@@ -194,6 +239,7 @@ export function createTerrainMaterial(options: TerrainMaterialOptions): TerrainM
         /* glsl */ `#include <common>
         uniform sampler2D uOverlay;
         uniform float uOverlayMix;
+        uniform sampler2D uTerrainData;
 
         // Value noise, hashed rather than sampled: a texture lookup would need a
         // texture to author, ship and bind, and the ground only needs something
@@ -235,6 +281,11 @@ export function createTerrainMaterial(options: TerrainMaterialOptions): TerrainM
       .replace(
         "#include <map_fragment>",
         /* glsl */ `#include <map_fragment>
+        // Sampled once at main() scope: the damp tint uses it here, and the
+        // occlusion that replaces <aomap_fragment> uses it after the lights.
+        vec4 cwTerrain = texture2D(uTerrainData, vMapUv);
+        float cwShade = cwTerrain.r;
+        float cwWetness = cwTerrain.g;
         {
           vec2 cwGround = vMapUv * ${extentM.toFixed(1)};
           float cwMottle = cwNoise(cwGround / ${MOTTLE_M.toFixed(2)});
@@ -257,8 +308,29 @@ export function createTerrainMaterial(options: TerrainMaterialOptions): TerrainM
           );
         }
 
+        // Damp ground, from the same accumulation the model routes on. Under the
+        // detail octaves so the two read as one surface, and before the overlay,
+        // which is meant to replace the ground colour rather than sit on a
+        // tinted version of it.
+        diffuseColor.rgb = mix(
+          diffuseColor.rgb,
+          diffuseColor.rgb * vec3(${DAMP_TINT.map((c) => c.toFixed(3)).join(", ")}),
+          cwWetness
+        );
+
         vec4 cwOverlay = texture2D(uOverlay, vMapUv);
         diffuseColor.rgb = mix(diffuseColor.rgb, cwOverlay.rgb, cwOverlay.a * uOverlayMix);`,
+      )
+      // Occlusion from sky-view openness, in the slot three leaves for exactly
+      // this. The chunk compiles to nothing without an aoMap, so replacing it
+      // costs no work and puts the modulation where the material already
+      // expects it — after the lights are accumulated, before they are summed.
+      .replace(
+        "#include <aomap_fragment>",
+        /* glsl */ `
+        float cwAoScale = mix(1.0, ${AO_OVERLAY_RELIEF.toFixed(2)}, uOverlayMix);
+        reflectedLight.indirectDiffuse *= mix(1.0, cwShade, ${AO_INDIRECT.toFixed(2)} * cwAoScale);
+        reflectedLight.directDiffuse *= mix(1.0, cwShade, ${AO_DIRECT.toFixed(2)} * cwAoScale);`,
       );
   };
 

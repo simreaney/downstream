@@ -20,7 +20,12 @@
 import { describe, expect, it } from "vitest";
 import * as THREE from "three";
 import type { GridSpec } from "../../src/core/grid";
-import { createRiverMesh, SAMPLES_PER_CELL } from "../../src/render/riverMesh";
+import {
+  createRiverMesh,
+  HALF_WIDTH_MAX,
+  HALF_WIDTH_MIN,
+  SAMPLES_PER_CELL,
+} from "../../src/render/riverMesh";
 import type { ReachDto } from "../../src/worker/protocol";
 
 const SPEC: GridSpec = { width: 16, height: 16, cellSize: 4 };
@@ -158,8 +163,8 @@ describe("createRiverMesh", () => {
     // interpolated between cells, and an interpolation that overshot would put
     // the ribbon outside the hydraulic geometry it is supposed to be drawing.
     for (let section = 0; section < sections; section++) {
-      expect(halfWidthAt(section)).toBeGreaterThanOrEqual(0.7 - 1e-6);
-      expect(halfWidthAt(section)).toBeLessThanOrEqual(2.6 + 1e-6);
+      expect(halfWidthAt(section)).toBeGreaterThanOrEqual(HALF_WIDTH_MIN - 1e-6);
+      expect(halfWidthAt(section)).toBeLessThanOrEqual(HALF_WIDTH_MAX + 1e-6);
     }
   });
 

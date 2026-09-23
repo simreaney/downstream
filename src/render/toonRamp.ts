@@ -14,8 +14,17 @@
 
 import * as THREE from "three";
 
-/** Shade levels from fully shadowed to fully lit. */
-const STEPS = [0.42, 0.68, 0.86, 1.0];
+/**
+ * Shade levels from fully shadowed to fully lit.
+ *
+ * The darkest step carries the whole shadow side of every surface in the world,
+ * so it sets how gloomy the landscape is allowed to get. It was 0.42, which was
+ * fine while the terrain had no occlusion term of its own; now that a hollow
+ * also gives up sky fill, the two compound and a shaded dip in a wood came back
+ * nearly black. Lifting the floor pays that back without touching the spacing
+ * above it, which is what gives the lit side its range.
+ */
+const STEPS = [0.47, 0.7, 0.87, 1.0];
 
 export function createToonRamp(): THREE.DataTexture {
   const data = new Uint8Array(STEPS.length * 4);
