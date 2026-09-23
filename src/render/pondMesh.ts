@@ -2,10 +2,9 @@
  * Pond surfaces.
  *
  * One disc per pond, sharing the water material with the river so a pond and the
- * stream below it are visibly the same substance. The surface height is driven
- * during storms by how full the pond is, which is the only way the player sees
- * an attenuation pond doing its job — it fills as the storm peaks and drains
- * over the following day.
+ * stream below it are visibly the same substance. The surface sits at the rim
+ * of the dug bowl; the storm model tracks how full each pond gets, but the disc
+ * does not yet rise and fall with it.
  *
  * Discs are pooled into a single instanced batch: ponds are added and removed
  * constantly as the player builds and undoes, and a mesh per pond would mean a
@@ -22,8 +21,6 @@ export interface PondSurfaces {
   /** Add a pond, returning its handle. Radius and level are in metres. */
   add(centre: THREE.Vector3, radius: number): number;
   remove(handle: number): void;
-  /** Set how full a pond is, 0 empty to 1 brim-full. */
-  setLevel(handle: number, fill: number, depth: number): void;
   dispose(): void;
 }
 
@@ -35,22 +32,32 @@ export function createPondSurfaces(material: THREE.Material, capacity = 200): Po
   const mesh = new THREE.InstancedMesh(geometry, material, capacity);
   mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
   mesh.count = 0;
+  // Hidden while empty, as in instancing.ts: an empty InstancedMesh still costs
+  // a program bind and a draw, and ponds are empty for most of a game.
+  mesh.visible = false;
   mesh.frustumCulled = false;
   mesh.renderOrder = 1;
   mesh.receiveShadow = true;
 
-  // The shared water material declares three per-vertex attributes, so the disc
+  // The shared water material declares four per-vertex attributes, so the disc
   // has to supply all of them or the shader reads undefined memory. Ponds carry
   // no reach risk of their own — their turbidity comes from the global uniform,
-  // driven by the fishery's clarity — so risk and flow are zero.
+  // driven by the fishery's clarity — so risk is zero.
   const position = geometry.getAttribute("position");
   geometry.setAttribute(
     "aReachRisk",
     new THREE.Float32BufferAttribute(new Float32Array(position.count), 1),
   );
+
+  // Still water: no travel coordinate, so no flow streaks, and no velocity, so
+  // the ripples only drift.
   geometry.setAttribute(
-    "aFlow",
-    new THREE.Float32BufferAttribute(new Float32Array(position.count), 1),
+    "aTravel",
+    new THREE.Float32BufferAttribute(new Float32Array(position.count).fill(-1), 1),
+  );
+  geometry.setAttribute(
+    "aDir",
+    new THREE.Float32BufferAttribute(new Float32Array(position.count * 2), 2),
   );
 
   // Bank runs 0 at the centre to 1 at the rim, so a pond gets the same depth
@@ -72,10 +79,11 @@ export function createPondSurfaces(material: THREE.Material, capacity = 200): Po
   const scale = new THREE.Vector3();
   const identity = new THREE.Quaternion();
 
+  const at = new THREE.Vector3();
   const write = (slot: number, y: number): void => {
     const centre = centres[slot];
     scale.set(radii[slot], 1, radii[slot]);
-    matrix.compose(new THREE.Vector3(centre.x, y, centre.z), identity, scale);
+    matrix.compose(at.set(centre.x, y, centre.z), identity, scale);
     mesh.setMatrixAt(slot, matrix);
     mesh.instanceMatrix.needsUpdate = true;
   };
@@ -95,6 +103,7 @@ export function createPondSurfaces(material: THREE.Material, capacity = 200): Po
 
       write(slot, centre.y);
       mesh.count = count;
+      mesh.visible = true;
       return handle;
     },
 
@@ -117,14 +126,9 @@ export function createPondSurfaces(material: THREE.Material, capacity = 200): Po
       slotOfHandle.delete(handle);
       count = lastSlot;
       mesh.count = count;
+      mesh.visible = count > 0;
     },
 
-    setLevel(handle, fill, depth) {
-      const slot = slotOfHandle.get(handle);
-      if (slot === undefined) return;
-      // The surface rises from the bottom of the bowl to its rim as it fills.
-      write(slot, centres[slot].y - depth * (1 - Math.min(1, Math.max(0, fill))));
-    },
 
     dispose() {
       mesh.removeFromParent();

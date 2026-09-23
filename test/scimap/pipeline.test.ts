@@ -14,7 +14,16 @@ import type { GridSpec } from "../../src/core/grid";
 import { hashArray, nanMean } from "../../src/core/stats";
 import { LandCover } from "../../src/scimap/constants";
 import { buildRiskWeight } from "../../src/scimap/landcover";
-import { recomputeFromTwi, recomputeFromWeights } from "../../src/scimap/pipeline";
+import { recomputeFromTwi, recomputeFromWeights, runFullScimap } from "../../src/scimap/pipeline";
+import { computeSourceRisk, normaliseErosion } from "../../src/scimap/erosion";
+import {
+  computeInChannelRisk,
+  createInChannelScratch,
+  normaliseInChannel,
+} from "../../src/scimap/inChannel";
+import { createRng, splitSeed } from "../../src/core/rng";
+import { generateTerrain } from "../../src/terrain/generate";
+import { generateLandCover } from "../../src/terrain/landcoverGen";
 import { capacityCells, storageBreakTwi, type ConnectivityBreak } from "../../src/scimap/twi";
 import { createWorld } from "../../src/world";
 
@@ -114,16 +123,12 @@ describe("createWorld", () => {
 });
 
 describe("incremental recompute", () => {
-  /** Full rebuild from the same inputs, for comparison against the fast paths. */
-  function fullRebuild(seed: number, mutate: (world: ReturnType<typeof createWorld>) => void) {
-    const world = createWorld(seed, OPTIONS);
-    mutate(world);
-    return world;
-  }
-
-  it("recomputeFromWeights equals a full rebuild after planting", () => {
-    // Plant a block of arable and compare the incremental path against building
-    // the same catchment from scratch with that land cover already in place.
+  it("recomputeFromWeights equals a from-scratch solve after planting", () => {
+    // Plant a block of arable and compare the incremental path — which reuses
+    // the cached erosion potential and routed dilution — against a catchment
+    // generated from scratch with that land cover already in place, normalised
+    // against the same frozen bounds by the standalone functions. The two share
+    // no cached state, so this is what catches a stale cache.
     const seed = 29;
     const planted: number[] = [];
 
@@ -139,19 +144,40 @@ describe("incremental recompute", () => {
     buildRiskWeight(incremental.arrays.landCover, incremental.arrays.riskWeight);
     recomputeFromWeights(incremental.arrays, incremental.bounds);
 
-    const reference = fullRebuild(seed, (world) => {
-      for (const cell of planted) world.arrays.landCover[cell] = LandCover.Woodland;
-      buildRiskWeight(world.arrays.landCover, world.arrays.riskWeight);
-      // Rebuild erosion and everything after it from first principles, using the
-      // same frozen bounds the incremental path used.
-      recomputeFromWeights(world.arrays, world.bounds);
-    });
-
-    expect(hashArray(incremental.arrays.erosion)).toBe(hashArray(reference.arrays.erosion));
-    expect(hashArray(incremental.arrays.sourceRisk)).toBe(
-      hashArray(reference.arrays.sourceRisk),
+    const terrain = generateTerrain(seed, { ...OPTIONS, spec: SPEC });
+    const { arrays: fresh } = runFullScimap(
+      terrain.dem,
+      (dem, slopeDeg) => {
+        const cover = generateLandCover(dem, slopeDeg, SPEC, createRng(splitSeed(seed, "landcover")));
+        for (const cell of planted) cover[cell] = LandCover.Woodland;
+        return cover;
+      },
+      SPEC,
+      terrain.outlet,
     );
-    expect(hashArray(incremental.arrays.inChannel)).toBe(hashArray(reference.arrays.inChannel));
+
+    // Raw erosion depends on nothing frozen, so it must match outright.
+    expect(hashArray(incremental.arrays.erosionRaw)).toBe(hashArray(fresh.erosionRaw));
+
+    // The normalised layers are compared on the incremental world's frozen
+    // bounds; connectivity does not depend on land cover, so it is shared.
+    const { bounds } = incremental;
+    const erosion = normaliseErosion(fresh.erosionRaw, bounds.erosion);
+    const sourceRisk = computeSourceRisk(erosion, incremental.arrays.connectivity);
+    const inChannel = normaliseInChannel(
+      computeInChannelRisk(
+        sourceRisk,
+        fresh.rainfallScaled,
+        fresh.table,
+        SPEC,
+        createInChannelScratch(sourceRisk.length),
+      ),
+      bounds.inChannel,
+    );
+
+    expect(hashArray(incremental.arrays.erosion)).toBe(hashArray(erosion));
+    expect(hashArray(incremental.arrays.sourceRisk)).toBe(hashArray(sourceRisk));
+    expect(hashArray(incremental.arrays.inChannel)).toBe(hashArray(inChannel));
   });
 
   it("leaves connectivity untouched when only land cover changed", () => {

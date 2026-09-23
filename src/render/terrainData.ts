@@ -4,8 +4,8 @@
  *
  * Two things the terrain shader needs and cannot work out per fragment:
  *
- * **Openness** — how much sky each cell can see. The shadow map covers 55 m
- * around the player (see `lighting.ts`), so everything beyond that is lit as if
+ * **Openness** — how much sky each cell can see. The shadow map covers only a
+ * region around the player (see `lighting.ts`), so everything beyond it is lit as if
  * the landscape were flat: a hollow, a gully floor and a spur top all come back
  * the same shade, and the middle distance turns into a single sheet of green
  * with nothing but tree shadows on it. Sky-view openness is the part of that the

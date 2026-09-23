@@ -1,7 +1,8 @@
 /**
  * Two grep-level rules that protect properties the type system cannot.
  *
- * 1. No `.sort(` under src/scimap or src/terrain. A comparator sort of the
+ * 1. No `.sort(` under src/scimap, src/terrain, src/sim or src/worker — the
+ *    generation, recompute and storm paths. A comparator sort of the
  *    65,536-cell grid costs roughly 15 ms on its own, which is the entire
  *    per-placement recompute budget spent in one call. Cell ordering must go
  *    through the radix sort in src/core/sort.ts.
@@ -19,14 +20,17 @@
 
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join, relative } from "node:path";
+import { fileURLToPath } from "node:url";
 
-const ROOT = new URL("..", import.meta.url).pathname;
+// fileURLToPath rather than `.pathname`, which leaves %20 in a path with a
+// space in it and a leading slash before a Windows drive letter.
+const ROOT = fileURLToPath(new URL("..", import.meta.url));
 const SRC = join(ROOT, "src");
 
 const RULES = [
   {
     pattern: /\.sort\s*\(/,
-    dirs: ["scimap", "terrain"],
+    dirs: ["scimap", "terrain", "sim", "worker"],
     message: "comparator sort in a hot path — use radixSortByValue from core/sort.ts",
   },
   {

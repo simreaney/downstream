@@ -12,16 +12,18 @@ export type PropId =
   | "treeBroadleaf"
   | "treeConifer"
   | "treeWillow"
-  | "sapling"
   | "rock"
   | "dam"
   | "logPile"
   | "spade"
   | "cottageA"
   | "cottageB"
+  | "cottageC"
+  | "cottageD"
   | "fisheryHut"
-  | "fish"
-  | "player";
+  | "well"
+  | "bush"
+  | "fish";
 
 const factories = new Map<PropId, PropFactory>();
 const built = new Map<PropId, PropAsset>();

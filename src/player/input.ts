@@ -15,6 +15,13 @@
  * are polled once a frame in `poll()` and reported as a "just pressed" set on
  * `actions` — edge-detected there so a held button fires its action once, the
  * same way a keydown handler ignores `event.repeat`.
+ *
+ * Zoom arrives from four places — the mouse wheel (and a trackpad's pinch,
+ * which browsers deliver as a wheel with ctrl held), the minus and equals keys,
+ * a two-finger pinch on a touch screen, and the gamepad's right-stick click —
+ * and all of them reduce to one number: the change in the log of the camera's
+ * distance. Log, so a notch of wheel is the same *proportion* of zoom close in
+ * as far out, which is how zoom feels right.
  */
 
 /** A discrete, edge-triggered intent — the gamepad's analogue of a keydown. */
@@ -31,7 +38,8 @@ export type GameAction =
   | "mapToggle"
   | "storm"
   | "save"
-  | "undo";
+  | "undo"
+  | "zoomCycle";
 
 export interface InputState {
   /** Movement intent in camera space, each component in [-1, 1]. */
@@ -41,6 +49,11 @@ export interface InputState {
   readonly lookX: number;
   readonly lookY: number;
   readonly sprint: boolean;
+  /**
+   * Zoom intent this frame, as a change in the log of camera distance:
+   * positive pulls the camera back, negative brings it in.
+   */
+  readonly zoom: number;
   /** Gamepad buttons pressed this frame. Absent for keyboard/mouse-only state. */
   readonly actions?: ReadonlySet<GameAction>;
 }
@@ -69,6 +82,23 @@ const MOVE_KEYS: Record<string, [number, number]> = {
 const LOOK_SENSITIVITY = 0.0042;
 
 /**
+ * Keys that zoom while held, and which way. `event.code`, so they sit on the
+ * same physical keys whatever the keyboard layout prints on them.
+ */
+const ZOOM_KEYS: Record<string, number> = {
+  minus: 1,
+  numpadsubtract: 1,
+  equal: -1,
+  numpadadd: -1,
+};
+
+/** Log-distance per second while a zoom key is held. */
+const KEY_ZOOM_RATE = 1.6;
+
+/** Log-distance per pixel of wheel travel; a typical mouse notch is 100 px. */
+const WHEEL_ZOOM_PER_PIXEL = 0.0015;
+
+/**
  * Standard Gamepad button index -> the action it fires.
  *
  * Indices follow the W3C "standard" layout, which the browser maps a Bluetooth
@@ -85,6 +115,7 @@ const GAMEPAD_BUTTON_ACTIONS: Partial<Record<number, GameAction>> = {
   7: "storm", // RT / R2 — run the 1-in-30 design storm
   8: "overlayOff", // Back / Select / View
   9: "save", // Start / Menu — save and copy the share link
+  11: "zoomCycle", // R3 — right-stick click steps through near, mid and overview
   12: "toolTree", // D-pad up
   13: "toolPond", // D-pad down
   14: "undo", // D-pad left
@@ -114,10 +145,15 @@ export function applyDeadzone(x: number, y: number): [number, number] {
 
 export function createInput(target: HTMLElement): Input {
   const held = new Set<string>();
+  const zoomHeld = new Set<string>();
   let lookX = 0;
   let lookY = 0;
+  let zoom = 0;
   let sprint = false;
   let dragging = false;
+  /** Active pointers, so two fingers can pinch instead of orbiting. */
+  const pointers = new Map<number, { x: number; y: number }>();
+  let pinchDistance = 0;
 
   let gamepadIndex: number | null = null;
   let gamepadMoveX = 0;
@@ -147,10 +183,14 @@ export function createInput(target: HTMLElement): Input {
       event.preventDefault();
     }
     if (event.code === "ShiftLeft" || event.code === "ShiftRight") sprint = true;
+    // Ctrl or Cmd with these is the browser's own page zoom; leave it alone.
+    if (code in ZOOM_KEYS && !event.ctrlKey && !event.metaKey) zoomHeld.add(code);
   };
 
   const onKeyUp = (event: KeyboardEvent): void => {
-    held.delete(event.code.toLowerCase());
+    const code = event.code.toLowerCase();
+    held.delete(code);
+    zoomHeld.delete(code);
     if (event.code === "ShiftLeft" || event.code === "ShiftRight") sprint = false;
   };
 
@@ -158,24 +198,56 @@ export function createInput(target: HTMLElement): Input {
   // forever, because the keyup lands in another window.
   const onBlur = (): void => {
     held.clear();
+    zoomHeld.clear();
+    pointers.clear();
     sprint = false;
     dragging = false;
   };
 
+  const spread = (): number => {
+    const [a, b] = [...pointers.values()];
+    return Math.hypot(a.x - b.x, a.y - b.y);
+  };
+
   const onPointerDown = (event: PointerEvent): void => {
-    dragging = true;
+    pointers.set(event.pointerId, { x: event.clientX, y: event.clientY });
+    dragging = pointers.size === 1;
+    if (pointers.size === 2) pinchDistance = spread();
     target.setPointerCapture(event.pointerId);
   };
 
   const onPointerUp = (event: PointerEvent): void => {
+    pointers.delete(event.pointerId);
+    // Lifting one finger of a pinch must not turn the other into an orbit
+    // mid-gesture, so dragging only resumes on a fresh press.
     dragging = false;
     if (target.hasPointerCapture(event.pointerId)) target.releasePointerCapture(event.pointerId);
   };
 
   const onPointerMove = (event: PointerEvent): void => {
+    const pointer = pointers.get(event.pointerId);
+    if (pointer) {
+      pointer.x = event.clientX;
+      pointer.y = event.clientY;
+    }
+    if (pointers.size === 2) {
+      // Fingers apart zooms in, together zooms out — the photo-viewer gesture.
+      const now = spread();
+      if (pinchDistance > 0 && now > 0) zoom += Math.log(pinchDistance / now);
+      pinchDistance = now;
+      return;
+    }
     if (!dragging) return;
     lookX -= event.movementX * LOOK_SENSITIVITY;
     lookY -= event.movementY * LOOK_SENSITIVITY;
+  };
+
+  const onWheel = (event: WheelEvent): void => {
+    // Not passive, so the page neither scrolls nor — for a trackpad pinch,
+    // which arrives as a ctrl-wheel — zooms the whole browser tab.
+    event.preventDefault();
+    const scale = event.deltaMode === 1 ? 40 : event.deltaMode === 2 ? 800 : 1;
+    zoom += event.deltaY * scale * WHEEL_ZOOM_PER_PIXEL * (event.ctrlKey ? 4 : 1);
   };
 
   window.addEventListener("keydown", onKeyDown);
@@ -187,6 +259,7 @@ export function createInput(target: HTMLElement): Input {
   target.addEventListener("pointerup", onPointerUp);
   target.addEventListener("pointercancel", onPointerUp);
   target.addEventListener("pointermove", onPointerMove);
+  target.addEventListener("wheel", onWheel, { passive: false });
 
   /**
    * Re-read the connected gamepad's sticks and buttons.
@@ -198,6 +271,7 @@ export function createInput(target: HTMLElement): Input {
    */
   const pollGamepad = (dt: number): void => {
     actions.clear();
+    for (const code of zoomHeld) zoom += ZOOM_KEYS[code] * KEY_ZOOM_RATE * dt;
     let pad: Gamepad | null = null;
     if (gamepadIndex !== null) {
       pad = navigator.getGamepads()[gamepadIndex] ?? null;
@@ -258,6 +332,9 @@ export function createInput(target: HTMLElement): Input {
     get sprint() {
       return sprint || gamepadSprint;
     },
+    get zoom() {
+      return zoom;
+    },
     get actions() {
       return gamepadIndex !== null ? actions : undefined;
     },
@@ -271,6 +348,7 @@ export function createInput(target: HTMLElement): Input {
     endFrame() {
       lookX = 0;
       lookY = 0;
+      zoom = 0;
     },
     dispose() {
       window.removeEventListener("keydown", onKeyDown);
@@ -282,6 +360,7 @@ export function createInput(target: HTMLElement): Input {
       target.removeEventListener("pointerup", onPointerUp);
       target.removeEventListener("pointercancel", onPointerUp);
       target.removeEventListener("pointermove", onPointerMove);
+      target.removeEventListener("wheel", onWheel);
     },
   };
 }

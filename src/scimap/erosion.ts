@@ -32,21 +32,52 @@ export function computeErosionRisk(
   cellAreaM2: number,
   out?: Float64Array,
 ): Float64Array {
-  const n = accum.length;
-  const risk = out && out.length === n ? out : new Float64Array(n);
+  return weightErosionPotential(computeErosionPotential(accum, slopeDeg, cellAreaM2, out), riskWeight);
+}
 
+/**
+ * The land-cover-independent part of erosion risk: contributing area times
+ * the tangent of slope, per cell.
+ *
+ * Neither changes during a session, so the recompute path computes this once
+ * and multiplies by the current erodibility each time rather than taking
+ * 65,000 tangents per placement. NaN wherever an input is not finite.
+ */
+export function computeErosionPotential(
+  accum: Float64Array,
+  slopeDeg: Float64Array,
+  cellAreaM2: number,
+  out?: Float64Array,
+): Float64Array {
+  const n = accum.length;
+  const potential = out && out.length === n ? out : new Float64Array(n);
   for (let i = 0; i < n; i++) {
     const a = accum[i];
     const s = slopeDeg[i];
-    const w = riskWeight[i];
-    if (!Number.isFinite(a) || !Number.isFinite(s) || !Number.isFinite(w)) {
-      risk[i] = NaN;
-      continue;
-    }
-    const value = Math.abs(a) * cellAreaM2 * Math.tan(clamp(s, 0, 89) * DEG_TO_RAD) * w;
-    risk[i] = Number.isFinite(value) ? value : NaN;
+    potential[i] =
+      Number.isFinite(a) && Number.isFinite(s)
+        ? Math.abs(a) * cellAreaM2 * Math.tan(clamp(s, 0, 89) * DEG_TO_RAD)
+        : NaN;
   }
-  return risk;
+  return potential;
+}
+
+/**
+ * Erosion risk from a precomputed potential and the current erodibility.
+ *
+ * Writes into `out`, which may be `potential` itself (as `computeErosionRisk`
+ * does). NaN wherever either input is not finite.
+ */
+export function weightErosionPotential(
+  potential: Float64Array,
+  riskWeight: Float64Array,
+  out: Float64Array = potential,
+): Float64Array {
+  for (let i = 0; i < potential.length; i++) {
+    const value = potential[i] * riskWeight[i];
+    out[i] = Number.isFinite(value) ? value : NaN;
+  }
+  return out;
 }
 
 /** Derive the baseline erosion stretch. Catchment generation only. */

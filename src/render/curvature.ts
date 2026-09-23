@@ -55,6 +55,20 @@ export function createCurvatureUniforms(
 }
 
 /**
+ * Scale the bend relative to its default strength.
+ *
+ * For the zoomed-out camera. The drop is k·d² in view-space distance, so a
+ * camera pulled back eight times drops the ground under its own focus point
+ * sixty-four times as far — the player sinks below the middle of the frame and
+ * the world curls into a ball. Scaling by (default distance / distance)² holds
+ * the drop at the focus constant, which leaves the near view exactly as it was
+ * and flattens the overview into something that reads as a map.
+ */
+export function setCurvatureScale(uniforms: CurvatureUniforms, scale: number): void {
+  uniforms.uCurvature.value.copy(DEFAULT_CURVATURE).multiplyScalar(scale);
+}
+
+/**
  * Bend a material's output, sharing `uniforms` with every other world material.
  *
  * Appends to `#include <project_vertex>` rather than replacing it, so this stays

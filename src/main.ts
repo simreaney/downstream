@@ -13,13 +13,15 @@ import { DEFAULT_LANDSCAPE_SIZE, LANDSCAPE_SIZES, landscapeSpec, type LandscapeS
 import { randomSeed } from "./core/rng";
 import {
   SAVE_VERSION,
-  loadFromStorage,
+  clearStoredSave,
   readShareCode,
+  readStoredCode,
   deserialise,
   saveToStorage,
   shareUrl,
   type SaveData,
 } from "./game/save";
+import { formatArea } from "./game/format";
 import { createBuildController } from "./game/buildController";
 import { createInventory } from "./game/inventory";
 import type { InterventionKind } from "./game/interventions";
@@ -29,10 +31,12 @@ import { createStormPlayer } from "./game/stormPlayer";
 import { createStormSchedule } from "./game/stormSchedule";
 import { depthForReturnPeriod, fitGumbel } from "./sim/gumbel";
 import { floodVillage, initialReceptors, updateReceptors } from "./game/receptors";
-import { computeScores, type StormSummary } from "./game/scoring";
+import { computeScores, type Scores, type StormSummary } from "./game/scoring";
+import type { Intervention } from "./game/interventions";
 import { storageOf } from "./game/interventions";
 import { plantingHelps } from "./game/validity";
-import { createFollowCamera } from "./render/camera";
+import { createFollowCamera, DEFAULT_CAMERA_DISTANCE } from "./render/camera";
+import { setCurvatureScale } from "./render/curvature";
 import { createPlayer } from "./player/controller";
 import { createInput, type GameAction } from "./player/input";
 import { createPlacementGhost } from "./player/placementGhost";
@@ -72,25 +76,51 @@ const ACTION_TOOL: Partial<Record<GameAction, InterventionKind>> = {
   toolPond: "pond",
 };
 
-/** Keyboard keys that map directly onto a `GameAction`, shared with the gamepad. */
+/**
+ * Keyboard keys that map directly onto a `GameAction`, shared with the gamepad.
+ *
+ * By `event.code` — the physical key — like movement in `player/input.ts`.
+ * Matching `event.key` instead meant the two disagreed on any non-QWERTY
+ * layout: on AZERTY the key in the W position walks forward by code and types
+ * "z" by key, so every step forward also undid the last build. Shifted digits
+ * also stopped selecting tools, because Shift+1 is "!" by key.
+ */
 const KEY_ACTIONS: Record<string, GameAction> = {
-  "1": "toolTree",
-  "2": "toolDam",
-  "3": "toolPond",
-  m: "overlayNext",
-  n: "overlayOff",
-  e: "gather",
-  f: "build",
-  " ": "build",
-  r: "storm",
-  k: "save",
-  z: "undo",
+  Digit1: "toolTree",
+  Numpad1: "toolTree",
+  Digit2: "toolDam",
+  Numpad2: "toolDam",
+  Digit3: "toolPond",
+  Numpad3: "toolPond",
+  KeyM: "overlayNext",
+  KeyN: "overlayOff",
+  KeyE: "gather",
+  KeyF: "build",
+  Space: "build",
+  KeyR: "storm",
+  KeyK: "save",
+  KeyZ: "undo",
 };
+
+/**
+ * The features a storm's result depends on, as one comparable string.
+ *
+ * A storm's flood score measures the ponds and dams that existed when it was
+ * run; once any of them is undone, that measurement no longer describes the
+ * catchment, and holding on to it would leave the score crediting storage the
+ * player has already been refunded for.
+ */
+function storageSignature(interventions: readonly Intervention[]): string {
+  return interventions
+    .filter((feature) => feature.kind !== "tree")
+    .map((feature) => `${feature.kind}:${feature.cell}`)
+    .join(",");
+}
 
 async function boot(): Promise<void> {
   const canvas = document.getElementById("viewport") as HTMLCanvasElement | null;
   const uiRoot = document.getElementById("ui-root");
-  if (!canvas || !uiRoot) throw new Error("index.html is missing #viewport or #ui-root");
+  if (!canvas || !uiRoot) throw new Error("play/index.html is missing #viewport or #ui-root");
 
   uiRoot.insertAdjacentHTML("beforeend", BOOT_MARKUP);
   const fill = document.getElementById("boot-fill") as HTMLElement;
@@ -113,7 +143,7 @@ async function boot(): Promise<void> {
   // only means the same place decoded against the grid width it was recorded
   // with, so a restored save regenerates at the size it was built on rather
   // than whatever the URL or default currently says.
-  const restored = await resolveSave();
+  const { save: restored, problem: saveProblem } = await resolveSave();
   const seed = restored?.seed ?? readSeed();
   const sizeId = restored?.sizeId ?? readLandscapeSize();
   const spec = landscapeSpec(sizeId);
@@ -126,16 +156,19 @@ async function boot(): Promise<void> {
   outletPosition.y = world.arrays.dem[world.outlet];
   const start = outletPosition.clone().multiplyScalar(0.72);
 
-  const player = createPlayer(world.arrays.dem, world.spec, start, scene.obstacles);
+  // On the drawn ground, river beds and all, so the player wades into a stream
+  // rather than walking across the top of it.
+  const player = createPlayer(scene.groundDem, world.spec, start, scene.obstacles);
   const input = createInput(canvas);
   const camera = createFollowCamera(
     renderer.camera,
-    world.arrays.dem,
+    scene.groundDem,
     world.spec,
     Math.atan2(-start.x, -start.z),
   );
 
   const hud = createHud(uiRoot);
+  if (saveProblem) hud.toast(`${saveProblem} — starting a fresh one`);
   const legend = createOverlayLegend(uiRoot);
   const overviewMap = createOverviewMap(
     uiRoot,
@@ -144,6 +177,7 @@ async function boot(): Promise<void> {
     world.arrays.landCover,
     world.arrays.channelMask,
     world.outlet,
+    { village: world.sites.villageCell, fishery: world.sites.fisheryCell },
   );
 
   const overlay = createOverlayControl({
@@ -201,7 +235,8 @@ async function boot(): Promise<void> {
   // later would quietly reset the player's progress to zero.
   const baseline = world.baseline;
   let latestMetrics = world.metrics;
-  let lastStorm: StormSummary | null = null;
+  /** The last storm, with the storage it was run against; see `storageSignature`. */
+  let lastStorm: (StormSummary & { readonly signature: string }) | null = null;
   let receptors = initialReceptors();
 
   /** Volume a design storm drops on the catchment, for the pre-storm proxy. */
@@ -218,14 +253,16 @@ async function boot(): Promise<void> {
    * dead zone, so the first call threw "cannot access before initialization"
    * and the game hung on the loading screen. Declaration order is the fix.
    */
+  let scores: Scores = computeScores(latestMetrics, baseline, null, 0, designStormVolumeM3);
   const refreshScores = (): void => {
     const storage = build.interventions.reduce(
       (total, feature) => total + storageOf(feature.kind),
       0,
     );
-    scorePanel.set(
-      computeScores(latestMetrics, baseline, lastStorm, storage, designStormVolumeM3),
-    );
+    const storm =
+      lastStorm && lastStorm.signature === storageSignature(build.interventions) ? lastStorm : null;
+    scores = computeScores(latestMetrics, baseline, storm, storage, designStormVolumeM3);
+    scorePanel.set(scores);
   };
 
   const build = createBuildController({
@@ -242,10 +279,9 @@ async function boot(): Promise<void> {
   });
 
   // Seed the river's colour from the catchment as generated, so the water is
-  // already telling the truth before the player touches anything.
-  const initial = await sim.recompute("sourceRisk", [], []);
-  scene.river.setReachRisk(initial.reachRisk);
-  overlay.adopt(initial.overlay);
+  // already telling the truth before the player touches anything. Generation
+  // returns it directly, from the same solve a recompute would run.
+  scene.river.setReachRisk(world.reachRisk);
 
   if (restored) {
     // Remove the nodes the saved game already collected before rebuilding, or
@@ -261,8 +297,13 @@ async function boot(): Promise<void> {
       }
       overviewMap.clearResource(node.id);
     }
-    await build.replay(restored.interventions);
-    hud.toast(`Restored — ${restored.interventions.length} features`);
+    try {
+      await build.replay(restored.interventions);
+      hud.toast(`Restored — ${restored.interventions.length} features`);
+    } catch (error: unknown) {
+      console.error(error);
+      hud.toast("That save could not be restored in full");
+    }
   }
   refreshScores();
 
@@ -277,23 +318,32 @@ async function boot(): Promise<void> {
         baselinePeakQ: playback.baselinePeakQ,
         tPeakSeconds: playback.tPeakSeconds,
         baselineTPeakSeconds: playback.baselineTPeakSeconds,
+        signature: stormSignature,
       };
       // A storm that outruns the catchment's capacity reaches the village. The
-      // depth is a proxy from the unmitigated peak, so building genuinely
-      // protects the houses rather than only the number.
+      // depth is a proxy from the peak *with* the player's features, so building
+      // genuinely protects the houses rather than only the number.
       receptors = floodVillage(receptors, Math.max(0, playback.peakQ - 0.25) * 0.6);
       refreshScores();
       const cut = playback.baselinePeakQ > 0
         ? (1 - playback.peakQ / playback.baselinePeakQ) * 100
         : 0;
+      // Built storage does not always lower an outlet peak — slowing one branch
+      // can line it up with another — so "nothing built" is only said when
+      // that is literally true.
+      const builtStorage = stormSignature !== "";
       hud.toast(
         cut > 0.5
           ? `Storm passed — your work cut the peak by ${cut.toFixed(0)}%`
-          : "Storm passed — nothing built upstream to slow it",
+          : builtStorage
+            ? "Storm passed — your ponds and dams barely changed this peak"
+            : "Storm passed — nothing built upstream to slow it",
       );
     },
   });
   let stormBusy = false;
+  /** Storage signature of the storm in flight, stamped on its result. */
+  let stormSignature = "";
   const weather = createStormSchedule(seed);
   const gumbel = fitGumbel();
 
@@ -308,6 +358,7 @@ async function boot(): Promise<void> {
     if (stormBusy || storm.running) return;
     stormBusy = true;
     hud.toast(announcement);
+    stormSignature = storageSignature(build.interventions);
 
     const damCells = build.interventions.filter((f) => f.kind === "dam").map((f) => f.cell);
     const pondCells = build.interventions.filter((f) => f.kind === "pond").map((f) => f.cell);
@@ -368,6 +419,10 @@ async function boot(): Promise<void> {
       overviewMap.toggle();
       return;
     }
+    if (action === "zoomCycle") {
+      camera.cycleZoom();
+      return;
+    }
 
     if (action === "gather") {
       const node = resources.nearest(player.position.x, player.position.z);
@@ -399,9 +454,22 @@ async function boot(): Promise<void> {
       // queue recomputes whose intermediate results the player never sees.
       if (busy) return;
       busy = true;
+      const kind = tool;
       void build
-        .place(tool, target.cell, performance.now() / 1000)
-        .then((result) => hud.toast(result.message))
+        .place(kind, target.cell, performance.now() / 1000)
+        .then((result) => {
+          hud.toast(result.message);
+          if (!result.placed) {
+            audio.play("refuse");
+            return;
+          }
+          audio.play(kind === "tree" ? "plant" : kind === "pond" ? "dig" : "build");
+          if (kind === "tree") tutorial.complete("plant");
+        })
+        .catch((error: unknown) => {
+          console.error(error);
+          hud.toast("That could not be built — nothing was spent");
+        })
         .finally(() => {
           busy = false;
         });
@@ -409,6 +477,12 @@ async function boot(): Promise<void> {
     }
 
     if (action === "storm") {
+      // Checked before deferring the weather: a press while a storm is already
+      // on its way must not quietly push the next scheduled one back.
+      if (stormBusy || storm.running) {
+        hud.toast("A storm is already passing");
+        return;
+      }
       tutorial.complete("storm");
       weather.defer(STORM_COOLDOWN_DAYS);
       runStorm(
@@ -454,20 +528,35 @@ async function boot(): Promise<void> {
       void build
         .undo()
         .then((result) => hud.toast(result.message))
+        .catch((error: unknown) => {
+          console.error(error);
+          hud.toast("Could not undo that — try again");
+        })
         .finally(() => {
           busy = false;
         });
     }
   };
 
+  // The player's chest, which is what the camera's see-through window aims at.
+  const sightTarget = new THREE.Vector3();
+
   renderer.onFrame((dt, elapsed) => {
     input.poll(dt);
     scene.water.update(elapsed);
     storm.update(dt);
     player.update(input.state, camera.yaw, dt);
-    camera.update(player.position, input.state.lookX, input.state.lookY, dt);
+    camera.update(player.position, input.state.lookX, input.state.lookY, dt, input.state.zoom);
+    // Flatter world and wider shadows as the camera pulls back; exactly the
+    // default look at the default distance and closer.
+    setCurvatureScale(scene.curvature, Math.min(1, (DEFAULT_CAMERA_DISTANCE / camera.distance) ** 2));
+    scene.lighting.setShadowReach(camera.distance);
+    sightTarget.copy(player.position);
+    sightTarget.y += 1.2;
+    scene.props.fade.set(renderer.camera.position, sightTarget);
     input.endFrame();
-    for (const action of input.state.actions ?? []) handleAction(action);
+    const actions = input.state.actions;
+    if (actions) for (const action of actions) handleAction(action);
     overlay.update(dt);
     if (overviewMap.visible) overviewMap.setPlayer(player.position.x, player.position.z, player.yaw);
 
@@ -479,13 +568,13 @@ async function boot(): Promise<void> {
 
     // Receptors lag the score deliberately: fish returning over a game day reads
     // as recovery, where an instant response reads as a slider being dragged.
-    receptors = updateReceptors(
-      receptors,
-      computeScores(latestMetrics, baseline, lastStorm, 0, designStormVolumeM3),
-      dt,
-    );
-    scene.water.setTurbidity(storm.running ? 0.6 : 1 - receptors.fisheryClarity);
-    audio.setRain(storm.running ? 1 : 0);
+    // The scores only change when the model or a storm does, so the ones
+    // `refreshScores` last computed are the current ones.
+    receptors = updateReceptors(receptors, scores, dt);
+    // Cloudier of the two: a storm stirs a clean river up, but never makes a
+    // silted one look clearer than it is.
+    scene.water.setTurbidity(Math.max(storm.storminess * 0.6, 1 - receptors.fisheryClarity));
+    audio.setRain(storm.storminess);
 
     // Weather runs on its own clock. It is paused while a storm plays out, so a
     // long playback cannot stack the next one on top of it.
@@ -522,22 +611,23 @@ async function boot(): Promise<void> {
   });
 
   window.addEventListener("keydown", (event) => {
-    if (event.repeat || event.metaKey || event.ctrlKey) return;
-    const key = event.key.toLowerCase();
+    if (event.metaKey || event.ctrlKey) return;
+    // Before the repeat check, so a held Tab cannot walk focus through the page.
+    if (event.code === "Tab") event.preventDefault();
+    if (event.repeat) return;
 
     // Not GameActions: Tab and Escape address the overview map's open/closed
     // state directly rather than toggling it, which a gamepad button doesn't need.
-    if (key === "tab") {
-      event.preventDefault();
+    if (event.code === "Tab") {
       overviewMap.toggle();
       return;
     }
-    if (key === "escape") {
+    if (event.code === "Escape") {
       if (overviewMap.visible) overviewMap.hide();
       return;
     }
 
-    const action = KEY_ACTIONS[key];
+    const action = KEY_ACTIONS[event.code];
     if (action) handleAction(action);
   });
 
@@ -554,22 +644,43 @@ async function boot(): Promise<void> {
   renderer.start();
 }
 
-/** A share code from the URL, else the last local save, else nothing. */
-async function resolveSave(): Promise<SaveData | null> {
+/**
+ * The save to restore, if any, and why a save that was there could not be.
+ *
+ * A share code in the URL wins; then an explicit `?seed=`, which asks for a
+ * particular catchment and must not be overridden by whatever was last saved
+ * locally; then the local save. A code that fails to load is reported rather
+ * than silently dropped — and a local one is cleared, or it would fail the
+ * same way on every visit.
+ */
+async function resolveSave(): Promise<{ save: SaveData | null; problem: string | null }> {
+  let problem: string | null = null;
+  const describe = (error: unknown): string =>
+    error instanceof Error ? error.message : "That save could not be read";
+
   const shared = readShareCode();
   if (shared) {
     try {
-      return await deserialise(shared);
+      return { save: await deserialise(shared), problem: null };
     } catch (error: unknown) {
       console.warn("Ignoring an unreadable share code", error);
+      problem = describe(error);
     }
   }
-  return loadFromStorage();
-}
 
-function formatArea(m2: number): string {
-  const hectares = m2 / 10_000;
-  return hectares >= 1 ? `${hectares.toFixed(1)} ha` : `${Math.round(m2)} m²`;
+  if (new URLSearchParams(window.location.search).has("seed")) return { save: null, problem };
+
+  const stored = readStoredCode();
+  if (stored) {
+    try {
+      return { save: await deserialise(stored), problem };
+    } catch (error: unknown) {
+      console.warn("Clearing an unreadable local save", error);
+      clearStoredSave();
+      problem ??= describe(error);
+    }
+  }
+  return { save: null, problem };
 }
 
 /**
@@ -602,10 +713,15 @@ function readLandscapeSize(): LandscapeSizeId {
 }
 
 boot().catch((error: unknown) => {
-  const message = error instanceof Error ? error.message : String(error);
-  document.body.insertAdjacentHTML(
-    "beforeend",
-    `<div class="boot-status"><div>Could not start.</div><div>${message}</div></div>`,
-  );
+  // Built as text, not HTML: the message can carry whatever a failed request
+  // or a hand-edited share code put in it.
+  const panel = document.createElement("div");
+  panel.className = "boot-status";
+  const heading = document.createElement("div");
+  heading.textContent = "Could not start.";
+  const detail = document.createElement("div");
+  detail.textContent = error instanceof Error ? error.message : String(error);
+  panel.append(heading, detail);
+  document.body.append(panel);
   console.error(error);
 });

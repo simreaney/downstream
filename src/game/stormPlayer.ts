@@ -26,6 +26,13 @@ const RAIN_FRACTION = 0.55;
 
 export interface StormPlayer {
   readonly running: boolean;
+  /**
+   * How hard it is raining, 0 to 1: up with the rain, down through the
+   * recession, 0 between storms. The sky follows it here; the caller drives
+   * the rain sound and the water's cloudiness from it, so each of those has a
+   * single owner.
+   */
+  readonly storminess: number;
   start(playback: StormPlayback): void;
   update(dt: number): void;
   stop(): void;
@@ -43,19 +50,25 @@ export function createStormPlayer(options: StormPlayerOptions): StormPlayer {
 
   let active: StormPlayback | null = null;
   let elapsed = 0;
+  let storminess = 0;
 
   const finish = (): void => {
     const finished = active;
     active = null;
     scene.flood.clear();
+    storminess = 0;
     sky.setStorminess(0);
-    scene.water.setTurbidity(0);
+    scene.water.setFlowRate(1);
     if (finished) options.onFinished(finished);
   };
 
   return {
     get running() {
       return active !== null;
+    },
+
+    get storminess() {
+      return storminess;
     },
 
     start(playback) {
@@ -82,20 +95,8 @@ export function createStormPlayer(options: StormPlayerOptions): StormPlayer {
       );
 
       chart.draw(
-        {
-          q: active.q,
-          turbidity: active.q,
-          peakQ: active.peakQ,
-          tPeakSeconds: active.tPeakSeconds,
-          volumeM3: 0,
-        },
-        {
-          q: active.baselineQ,
-          turbidity: active.baselineQ,
-          peakQ: active.baselinePeakQ,
-          tPeakSeconds: active.baselineTPeakSeconds,
-          volumeM3: 0,
-        },
+        { q: active.q, peakQ: active.peakQ, tPeakSeconds: active.tPeakSeconds },
+        { q: active.baselineQ, peakQ: active.baselinePeakQ, tPeakSeconds: active.baselineTPeakSeconds },
         active.stepSeconds,
         progress,
       );
@@ -103,12 +104,18 @@ export function createStormPlayer(options: StormPlayerOptions): StormPlayer {
       // The sky darkens while it is raining and clears through the recession,
       // so the visual state tracks the hyetograph rather than the hydrograph —
       // the rain stops well before the river peaks, which is itself worth seeing.
-      const storminess =
+      storminess =
         progress < RAIN_FRACTION
           ? Math.min(1, progress / (RAIN_FRACTION * 0.3))
           : Math.max(0, 1 - (progress - RAIN_FRACTION) / (1 - RAIN_FRACTION));
       sky.setStorminess(storminess);
-      scene.water.setTurbidity(storminess * 0.6);
+
+      // The river's surface runs faster with discharge, so it follows the
+      // hydrograph rather than the rain: it keeps quickening after the sky has
+      // cleared, and settles back only on the recession.
+      const step = Math.min(active.q.length - 1, Math.floor(progress * (active.q.length - 1)));
+      const relative = active.peakQ > 0 ? active.q[step] / active.peakQ : 0;
+      scene.water.setFlowRate(1 + 1.8 * Math.max(0, relative));
 
       if (progress >= 1) finish();
     },

@@ -31,17 +31,6 @@ export function buildRiskWeight(
   return weights;
 }
 
-/** Per-cell runoff generation potential. Not the same concept as erodibility. */
-export function buildRunoffWeight(
-  landCover: Uint8Array,
-  out?: Float64Array,
-): Float64Array {
-  const n = landCover.length;
-  const weights = out && out.length === n ? out : new Float64Array(n);
-  for (let i = 0; i < n; i++) weights[i] = RUNOFF_WEIGHT_LUT[landCover[i]];
-  return weights;
-}
-
 /** Land covers a player may plant over. */
 export function isPlantable(cover: LandCover): boolean {
   return (

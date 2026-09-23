@@ -130,8 +130,12 @@ export type SimResponse =
       accum: ArrayBuffer;
       channelMask: ArrayBuffer;
       landCover: ArrayBuffer;
+      /** Int32 D8 successor per cell, -1 at the outlet. */
+      downstream: ArrayBuffer;
       overlay: ArrayBuffer;
       reaches: ReachDto[];
+      /** Float32 in-channel risk per reach vertex, for the river's first colour. */
+      reachRisk: ArrayBuffer;
       sites: SitesDto;
       bounds: StretchBounds;
       /** Metrics for the pristine catchment: the score's frozen denominator. */

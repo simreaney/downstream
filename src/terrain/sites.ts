@@ -9,6 +9,14 @@
  * on the floodplain a little upstream — close enough to the channel to be
  * genuinely at risk in a large event, on ground flat enough to have been built
  * on, which is exactly the bargain real settlements made.
+ *
+ * Every catchment gets a whole village. The first version looked for flat
+ * ground only around one fixed point on the trunk and only below 9 degrees,
+ * which works on most seeds and quietly thins the village out on a steep one.
+ * Now the whole stretch of trunk above the fishery is scored for buildable
+ * ground, and the slope limit and search radius relax step by step until every
+ * cottage has a plot — the village is guaranteed by construction rather than
+ * by the terrain being kind.
  */
 
 import type { GridSpec } from "../core/grid";
@@ -27,8 +35,29 @@ export interface Sites {
 const FISHERY_OFFSET_CELLS = 14;
 
 /** Cottages per village, and how far they spread from its centre. */
-const COTTAGE_COUNT = 7;
+export const COTTAGE_COUNT = 7;
 const VILLAGE_RADIUS_CELLS = 5;
+
+/**
+ * Slope limits tried in turn, in degrees, and then search radii.
+ *
+ * 9 degrees is where a cottage still sits on its plot without looking
+ * perched; past that it stands on a stone plinth (see `props/building.ts`),
+ * which reads as a hillside village rather than as a mistake.
+ */
+const BUILDABLE_SLOPES_DEG = [9, 12, 16, 22, 90];
+const SEARCH_RADII_CELLS = [VILLAGE_RADIUS_CELLS, VILLAGE_RADIUS_CELLS + 2, VILLAGE_RADIUS_CELLS + 4];
+
+/** Cells kept clear around the village centre, for the green and its well. */
+const GREEN_RADIUS_CELLS = 1;
+
+/**
+ * Stretch of trunk scored for a village site, in cells above the outlet, and
+ * the spot within it that is preferred when several have room.
+ */
+const VILLAGE_SEARCH_START = FISHERY_OFFSET_CELLS + 8;
+const VILLAGE_SEARCH_END = FISHERY_OFFSET_CELLS + 72;
+const VILLAGE_PREFERRED = FISHERY_OFFSET_CELLS + 18;
 
 export function chooseSites(
   spec: GridSpec,
@@ -59,9 +88,27 @@ export function chooseSites(
   const fisheryCell = trunk[Math.min(FISHERY_OFFSET_CELLS, trunk.length - 1)];
 
   // The village goes on the flattest ground near the trunk, further upstream
-  // than the fishery so the player passes it on the way inland.
-  const villageAnchor = trunk[Math.min(FISHERY_OFFSET_CELLS + 18, trunk.length - 1)];
-  const villageCell = flattestNear(spec, villageAnchor, slopeDeg, channelMask, 6);
+  // than the fishery so the player passes it on the way inland. Every few
+  // cells along that stretch is a candidate; the one with the most room wins,
+  // and among those with room enough the one nearest the preferred spot.
+  let villageCell = -1;
+  let bestScore = -Infinity;
+  const searchEnd = Math.min(trunk.length, VILLAGE_SEARCH_END);
+  for (let k = VILLAGE_SEARCH_START; k < searchEnd; k += 3) {
+    const centre = flattestNear(spec, trunk[k], slopeDeg, channelMask, 6);
+    const room = countBuildable(spec, centre, slopeDeg, channelMask, VILLAGE_RADIUS_CELLS, BUILDABLE_SLOPES_DEG[0]);
+    // Room saturates at three plots a cottage: beyond that more room is not a
+    // better village, and the preference decides.
+    const score = Math.min(room, COTTAGE_COUNT * 3) - Math.abs(k - VILLAGE_PREFERRED) * 0.15;
+    if (score > bestScore) {
+      bestScore = score;
+      villageCell = centre;
+    }
+  }
+  if (villageCell < 0) {
+    // A trunk too short to search: fall back to its top.
+    villageCell = flattestNear(spec, trunk[trunk.length - 1], slopeDeg, channelMask, 6);
+  }
 
   return {
     fisheryCell,
@@ -86,7 +133,68 @@ function buildInflows(
   return inflows;
 }
 
-/** Flattest non-channel cell within `radius` of an anchor. */
+/** Whether a cell is a channel cell or touches one. */
+function nearChannel(spec: GridSpec, cell: number, channelMask: Uint8Array): boolean {
+  const row = (cell / spec.width) | 0;
+  const col = cell % spec.width;
+  for (let dRow = -1; dRow <= 1; dRow++) {
+    for (let dCol = -1; dCol <= 1; dCol++) {
+      const r = row + dRow;
+      const c = col + dCol;
+      if (r < 0 || r >= spec.height || c < 0 || c >= spec.width) continue;
+      if (channelMask[r * spec.width + c]) return true;
+    }
+  }
+  return false;
+}
+
+/**
+ * Whether a cottage may stand on a cell.
+ *
+ * Not on the channel or beside it — the render ground there is carved into a
+ * river bed (see `render/riverMesh.ts`), and the model's floodplain is right
+ * next to it anyway — and not on the map's outermost ring, where half the plot
+ * would be off the edge of the world.
+ */
+function buildable(
+  spec: GridSpec,
+  cell: number,
+  slopeDeg: Float64Array,
+  channelMask: Uint8Array,
+  maxSlope: number,
+): boolean {
+  const row = (cell / spec.width) | 0;
+  const col = cell % spec.width;
+  if (row < 1 || row >= spec.height - 1 || col < 1 || col >= spec.width - 1) return false;
+  if (slopeDeg[cell] > maxSlope) return false;
+  return !nearChannel(spec, cell, channelMask);
+}
+
+/** Buildable cells within `radius` of a centre. */
+function countBuildable(
+  spec: GridSpec,
+  centre: number,
+  slopeDeg: Float64Array,
+  channelMask: Uint8Array,
+  radius: number,
+  maxSlope: number,
+): number {
+  const row = (centre / spec.width) | 0;
+  const col = centre % spec.width;
+  let count = 0;
+  for (let dRow = -radius; dRow <= radius; dRow++) {
+    for (let dCol = -radius; dCol <= radius; dCol++) {
+      if (dRow * dRow + dCol * dCol > radius * radius) continue;
+      const r = row + dRow;
+      const c = col + dCol;
+      if (r < 0 || r >= spec.height || c < 0 || c >= spec.width) continue;
+      if (buildable(spec, r * spec.width + c, slopeDeg, channelMask, maxSlope)) count++;
+    }
+  }
+  return count;
+}
+
+/** Flattest cell clear of the channel within `radius` of an anchor. */
 function flattestNear(
   spec: GridSpec,
   anchor: number,
@@ -107,7 +215,7 @@ function flattestNear(
       if (r < 0 || r >= spec.height || c < 0 || c >= spec.width) continue;
 
       const cell = r * spec.width + c;
-      if (channelMask[cell]) continue;
+      if (nearChannel(spec, cell, channelMask)) continue;
       if (slopeDeg[cell] < bestSlope) {
         bestSlope = slopeDeg[cell];
         best = cell;
@@ -117,11 +225,37 @@ function flattestNear(
   return best;
 }
 
+/**
+ * Plots for every cottage in the village.
+ *
+ * Tries the strictest slope limit in the smallest radius first and relaxes one
+ * step at a time until every cottage has a plot, so a gentle floodplain gets a
+ * tight village of level plots and a steep valley still gets a whole one.
+ */
 function scatterCottages(
   spec: GridSpec,
   centre: number,
   slopeDeg: Float64Array,
   channelMask: Uint8Array,
+): number[] {
+  let best: number[] = [];
+  for (const radius of SEARCH_RADII_CELLS) {
+    for (const maxSlope of BUILDABLE_SLOPES_DEG) {
+      const chosen = pickPlots(spec, centre, slopeDeg, channelMask, radius, maxSlope);
+      if (chosen.length >= COTTAGE_COUNT) return chosen;
+      if (chosen.length > best.length) best = chosen;
+    }
+  }
+  return best;
+}
+
+function pickPlots(
+  spec: GridSpec,
+  centre: number,
+  slopeDeg: Float64Array,
+  channelMask: Uint8Array,
+  radius: number,
+  maxSlope: number,
 ): number[] {
   const row = (centre / spec.width) | 0;
   const col = centre % spec.width;
@@ -132,14 +266,17 @@ function scatterCottages(
   // to be applied as we go anyway, and `lint:hotpath` keeps comparator sorts out
   // of the generation path on principle.
   const candidates: { cell: number; slope: number }[] = [];
-  for (let dRow = -VILLAGE_RADIUS_CELLS; dRow <= VILLAGE_RADIUS_CELLS; dRow++) {
-    for (let dCol = -VILLAGE_RADIUS_CELLS; dCol <= VILLAGE_RADIUS_CELLS; dCol++) {
+  for (let dRow = -radius; dRow <= radius; dRow++) {
+    for (let dCol = -radius; dCol <= radius; dCol++) {
+      if (dRow * dRow + dCol * dCol > radius * radius) continue;
+      // The green stays open.
+      if (Math.abs(dRow) <= GREEN_RADIUS_CELLS && Math.abs(dCol) <= GREEN_RADIUS_CELLS) continue;
       const r = row + dRow;
       const c = col + dCol;
       if (r < 0 || r >= spec.height || c < 0 || c >= spec.width) continue;
 
       const cell = r * spec.width + c;
-      if (channelMask[cell] || slopeDeg[cell] > 9) continue;
+      if (!buildable(spec, cell, slopeDeg, channelMask, maxSlope)) continue;
       candidates.push({ cell, slope: slopeDeg[cell] });
     }
   }

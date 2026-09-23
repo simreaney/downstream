@@ -8,12 +8,13 @@
  */
 
 import * as THREE from "three";
+import { mergeGeometries } from "three/examples/jsm/utils/BufferGeometryUtils.js";
 import { part, type PropAsset, type PropContext } from "./types";
 
-const TIMBER = 0x8a6236;
-const CUT_END = 0xc9a878;
-const HANDLE = 0x7a5a38;
-const BLADE = 0xb9c2c7;
+const TIMBER = 0xc49a6c;
+const CUT_END = 0xf2dfbc;
+const HANDLE = 0xb58c64;
+const BLADE = 0xcdd8e0;
 
 /**
  * A stack of cut logs, with two leaning against it — the wood pickup.
@@ -42,14 +43,14 @@ export function logPile(context: PropContext): PropAsset {
   ];
 
   for (const [x, y, z] of layout) {
-    const log = new THREE.CylinderGeometry(radius, radius, length, 8);
+    const log = new THREE.CylinderGeometry(radius, radius, length, 14);
     log.rotateZ(Math.PI / 2);
     log.translate(x, y, z);
     logs.push(log);
 
     // Pale cut ends, so the pile reads as felled timber rather than as branches.
     for (const side of [-1, 1]) {
-      const end = new THREE.CylinderGeometry(radius + 0.005, radius + 0.005, 0.06, 8);
+      const end = new THREE.CylinderGeometry(radius + 0.005, radius + 0.005, 0.06, 14);
       end.rotateZ(Math.PI / 2);
       end.translate(x + side * (length / 2), y, z);
       ends.push(end);
@@ -59,7 +60,7 @@ export function logPile(context: PropContext): PropAsset {
   // Two leaning against the stack, tilted out of plane so the silhouette is not
   // symmetrical from every angle.
   for (const [tilt, offset] of [[0.42, -0.55], [-0.34, 0.62]] as const) {
-    const leaning = new THREE.CylinderGeometry(radius * 0.8, radius * 0.85, 2.3, 7);
+    const leaning = new THREE.CylinderGeometry(radius * 0.8, radius * 0.85, 2.3, 12);
     leaning.translate(0, 1.15, 0);
     leaning.rotateX(tilt * 0.5);
     leaning.rotateZ(tilt);
@@ -69,8 +70,8 @@ export function logPile(context: PropContext): PropAsset {
 
   return {
     parts: [
-      part(merge(logs), context.material(TIMBER)),
-      part(merge(ends), context.material(CUT_END)),
+      part(mergeGeometries(logs), context.material(TIMBER)),
+      part(mergeGeometries(ends), context.material(CUT_END)),
     ],
     radius: 1.1,
     height: 2.2,
@@ -79,61 +80,23 @@ export function logPile(context: PropContext): PropAsset {
 
 /** A spade stuck upright in the ground — the one-off tool pickup. */
 export function spade(context: PropContext): PropAsset {
-  const shaft = new THREE.CylinderGeometry(0.055, 0.05, 1.5, 6);
+  const shaft = new THREE.CylinderGeometry(0.06, 0.055, 1.5, 10);
   shaft.translate(0, 0.95, 0);
 
-  const grip = new THREE.TorusGeometry(0.13, 0.045, 6, 10);
+  const grip = new THREE.TorusGeometry(0.13, 0.05, 8, 16);
   grip.rotateY(Math.PI / 2);
   grip.translate(0, 1.76, 0);
 
-  const blade = new THREE.BoxGeometry(0.34, 0.42, 0.05);
+  const blade = new THREE.CapsuleGeometry(0.15, 0.18, 4, 12);
+  blade.scale(1.1, 1, 0.3);
   blade.translate(0, 0.28, 0);
 
   return {
     parts: [
-      part(merge([shaft, grip]), context.material(HANDLE)),
+      part(mergeGeometries([shaft, grip]), context.material(HANDLE)),
       part(blade, context.material(BLADE)),
     ],
     radius: 0.35,
     height: 1.9,
   };
-}
-
-/** Concatenate geometries sharing a material, so a prop stays one draw call. */
-function merge(parts: THREE.BufferGeometry[]): THREE.BufferGeometry {
-  let vertexCount = 0;
-  let indexCount = 0;
-  for (const geometry of parts) {
-    vertexCount += geometry.getAttribute("position").count;
-    indexCount += geometry.getIndex()?.count ?? 0;
-  }
-
-  const positions = new Float32Array(vertexCount * 3);
-  const normals = new Float32Array(vertexCount * 3);
-  const indices = new Uint32Array(indexCount);
-
-  let vertexOffset = 0;
-  let indexOffset = 0;
-  for (const geometry of parts) {
-    const position = geometry.getAttribute("position");
-    const normal = geometry.getAttribute("normal");
-    const index = geometry.getIndex();
-
-    positions.set(position.array as Float32Array, vertexOffset * 3);
-    normals.set(normal.array as Float32Array, vertexOffset * 3);
-    if (index) {
-      for (let i = 0; i < index.count; i++) {
-        indices[indexOffset + i] = index.getX(i) + vertexOffset;
-      }
-      indexOffset += index.count;
-    }
-    vertexOffset += position.count;
-    geometry.dispose();
-  }
-
-  const merged = new THREE.BufferGeometry();
-  merged.setAttribute("position", new THREE.BufferAttribute(positions, 3));
-  merged.setAttribute("normal", new THREE.BufferAttribute(normals, 3));
-  merged.setIndex(new THREE.BufferAttribute(indices, 1));
-  return merged;
 }

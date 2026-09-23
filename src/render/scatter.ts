@@ -17,11 +17,11 @@ import { isLowPower } from "../config";
 import { LandCover } from "../scimap/constants";
 import type { Obstacle } from "../player/controller";
 import { leakyDam } from "../props/dam";
-import { cottageA, cottageB, fisheryHut } from "../props/building";
+import { cottageA, cottageB, cottageC, cottageD, fisheryHut, well } from "../props/building";
 import { fish } from "../props/fauna";
 import { logPile, spade } from "../props/pickups";
 import { boulder } from "../props/rock";
-import { broadleaf, conifer, willow } from "../props/tree";
+import { broadleaf, bush, conifer, willow } from "../props/tree";
 import { getProp, registerProp } from "../props/registry";
 import type { PropContext } from "../props/types";
 import { createInstancedBatch, type InstancedBatch } from "./instancing";
@@ -36,7 +36,11 @@ registerProp("logPile", logPile);
 registerProp("spade", spade);
 registerProp("cottageA", cottageA);
 registerProp("cottageB", cottageB);
+registerProp("cottageC", cottageC);
+registerProp("cottageD", cottageD);
 registerProp("fisheryHut", fisheryHut);
+registerProp("well", well);
+registerProp("bush", bush);
 registerProp("fish", fish);
 
 /**
@@ -103,10 +107,17 @@ export interface Scatter {
   dispose(): void;
 }
 
-/** Slight per-instance tint, so a wood is not one flat colour. */
+/**
+ * Slight per-instance tint, so a wood is not one flat colour.
+ *
+ * Mostly a drift in hue — some crowns a touch warmer, some a touch cooler —
+ * with only a little brightness spread, so a wood reads as a cluster of soft
+ * pastel shades rather than as light and dark trees.
+ */
 function tint(rng: Rng, out: THREE.Color): THREE.Color {
-  const shade = 0.86 + rng.next() * 0.28;
-  return out.setRGB(shade, shade * (0.96 + rng.next() * 0.08), shade * 0.94);
+  const shade = 0.93 + rng.next() * 0.12;
+  const warmth = rng.next() - 0.5;
+  return out.setRGB(shade * (1 + warmth * 0.08), shade, shade * (1 - warmth * 0.1));
 }
 
 export function scatterVegetation(
@@ -116,6 +127,8 @@ export function scatterVegetation(
   landCover: Uint8Array,
   spec: GridSpec,
   seed: number,
+  /** Cells to leave bare: the river and its banks, the village, the fishery. */
+  keepClear?: Uint8Array,
 ): Scatter {
   const rng = createRng(splitSeed(seed, "scatter"));
 
@@ -201,6 +214,10 @@ export function scatterVegetation(
       const trees = TREE_DENSITY[cover] ?? 0;
       const rocks = ROCK_DENSITY[cover] ?? 0;
       if (trees === 0 && rocks === 0) continue;
+      // Skipping a cell before its random draws shifts every later cell's
+      // draws, which is fine: scatter only has to grow the same wood on every
+      // load of a seed, and the mask is itself a function of the seed.
+      if (keepClear?.[cell]) continue;
 
       // Jitter within the cell so the wood does not sit on a visible lattice.
       const baseX = (col + 0.5) * spec.cellSize - halfWidth;

@@ -10,6 +10,14 @@
  * The dam and pond assertions are the game's central flood claim, stated as
  * tests: leaky dams delay and clip the peak without removing water, ponds remove
  * water until they fill.
+ *
+ * A dam here is pure roughness — it slows its cell and stores nothing — so the
+ * peak it clips at the outlet depends on *where* the dams are: slowing one
+ * branch can line its peak up with another's and raise the combined peak, a
+ * real timing effect. A handful of dams on a stub of channel can therefore do
+ * either; what the model claims, and what these tests pin, is that a
+ * programme of dams across the reaches the game lets the player dam lowers and
+ * delays the peak. That has held on every seed probed.
  */
 
 import { describe, expect, it } from "vitest";
@@ -22,24 +30,38 @@ import {
   sampleStormDepth,
 } from "../../src/sim/gumbel";
 import { DAM_ROUGHNESS, runStorm, type StormInput } from "../../src/sim/storm";
-import { createWorld } from "../../src/world";
+import { channelThresholdCells } from "../../src/scimap/constants";
+import { createWorld, type World } from "../../src/world";
 import type { GridSpec } from "../../src/core/grid";
 
 const SPEC: GridSpec = { width: 64, height: 64, cellSize: 4 };
 const OPTIONS = { spec: SPEC, erosion: { droplets: 3000 } };
 
-function stormInput(overrides: Partial<StormInput> = {}): StormInput {
-  const { arrays } = createWorld(20260809, OPTIONS);
-  const n = SPEC.width * SPEC.height;
+/**
+ * Worlds are built once per file and shared: generation is deterministic and
+ * `runStorm` only reads its input, while every test builds its own features.
+ */
+const worlds = new Map<GridSpec, World>();
+function worldFor(spec: GridSpec, options: object): World {
+  let world = worlds.get(spec);
+  if (!world) {
+    world = createWorld(20260809, { spec, ...options });
+    worlds.set(spec, world);
+  }
+  return world;
+}
+
+function stormInput(overrides: Partial<StormInput> = {}, spec = SPEC, options: object = OPTIONS): StormInput {
+  const { arrays } = worldFor(spec, options);
+  const n = spec.width * spec.height;
 
   return {
-    spec: SPEC,
+    spec,
     table: arrays.table,
     slopeDeg: arrays.slopeDeg,
     channelMask: arrays.channelMask,
     landCover: arrays.landCover,
     rainfallScaled: arrays.rainfallScaled,
-    sourceRisk: arrays.sourceRisk,
     outlet: arrays.outlet,
     gaugeCell: arrays.outlet,
     features: {
@@ -155,22 +177,40 @@ describe("runStorm", () => {
   }, 120_000);
 
   it("makes leaky dams delay and clip the peak", () => {
-    const input = stormInput();
-    const damRoughness = new Float64Array(input.spec.width * input.spec.height);
+    // A catchment big enough to have a real tributary network, with a dam on
+    // every reach the game allows one on (validity.ts: low-order reaches only).
+    const spec: GridSpec = { width: 128, height: 128, cellSize: 4 };
+    const input = stormInput({}, spec, { erosion: { droplets: 14000 } });
+    const { arrays } = worldFor(spec, {});
+    const damRoughness = new Float64Array(spec.width * spec.height);
+    const largestDammable = channelThresholdCells(spec.cellSize) * 6;
 
     let placed = 0;
-    for (let cell = 0; cell < damRoughness.length && placed < 40; cell++) {
-      if (input.channelMask[cell]) {
+    for (let cell = 0; cell < damRoughness.length; cell++) {
+      if (input.channelMask[cell] && arrays.accum[cell] <= largestDammable) {
         damRoughness[cell] = DAM_ROUGHNESS;
         placed++;
       }
     }
-    expect(placed).toBeGreaterThan(10);
+    expect(placed).toBeGreaterThan(50);
 
     const result = runStorm({ ...input, features: { ...input.features, damRoughness } }, STORM);
 
     // The claim the whole flood half of the game rests on.
     expect(result.withFeatures.peakQ).toBeLessThan(result.counterfactual.peakQ);
+    expect(result.withFeatures.tPeakSeconds).toBeGreaterThanOrEqual(
+      result.counterfactual.tPeakSeconds,
+    );
+  }, 120_000);
+
+  it("delays the peak even when only a few dams are built", () => {
+    // Clipping depends on where the dams sit; slowing the water never does.
+    const input = stormInput();
+    const damRoughness = new Float64Array(SPEC.width * SPEC.height);
+    for (let cell = 0; cell < damRoughness.length; cell++) {
+      if (input.channelMask[cell]) damRoughness[cell] = DAM_ROUGHNESS;
+    }
+    const result = runStorm({ ...input, features: { ...input.features, damRoughness } }, STORM);
     expect(result.withFeatures.tPeakSeconds).toBeGreaterThanOrEqual(
       result.counterfactual.tPeakSeconds,
     );

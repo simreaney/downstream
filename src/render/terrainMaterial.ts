@@ -6,17 +6,24 @@
  * a hand-written shader would mean reimplementing every one of them to get a
  * colour ramp composited over the surface.
  *
- * Both the base colour and the overlay are 256x256 nearest-filtered DataTextures
- * on the grid the model computes in. That is a deliberate look as well as a
- * cheap one: crisp cell edges read as a data product rather than a painting, and
- * blocky fields are squarely in the Animal Crossing register. Linear filtering
- * would blend adjacent land-cover classes into colours that belong to neither.
+ * Both the base colour and the overlay are DataTextures on the grid the model
+ * computes in, and they are filtered differently on purpose. The overlay is
+ * nearest-sampled: it is the one layer meant to be read as data, and crisp
+ * cells say so. The land cover is sampled *soft-nearest* — each cell is flat
+ * colour across most of its width and blends to its neighbour only over a
+ * narrow band at the edge. Plain nearest leaves hard 4 m staircases along every
+ * field boundary, which is the one harsh edge left in an otherwise soft toy
+ * world; plain linear smears classes into colours that belong to neither. The
+ * narrow band keeps every field its own colour while rounding the steps off.
  */
 
 import * as THREE from "three";
+import { isLowPower } from "../config";
 import type { GridSpec } from "../core/grid";
 import { LandCover } from "../scimap/constants";
 import { applyCurvature, type CurvatureUniforms } from "./curvature";
+import { GLSL_NOISE } from "./glsl";
+import { GROUND_PATTERN_APPLY, GROUND_PATTERN_FUNCTIONS } from "./groundPatterns";
 
 /**
  * Wavelengths of the three octaves of ground detail, in metres.
@@ -42,21 +49,17 @@ const TOOTH_M = 0.85;
  * subtle was safer, and the ground came back indistinguishable from flat colour
  * in a screenshot.
  */
-const MOTTLE_STRENGTH = 0.15;
-const GRAIN_STRENGTH = 0.24;
-const TOOTH_STRENGTH = 0.17;
+const MOTTLE_STRENGTH = 0.13;
+const GRAIN_STRENGTH = 0.16;
+const TOOTH_STRENGTH = 0.1;
 
 /**
- * Distances over which the two fine octaves fade out, in metres.
+ * Per-cover texture — furrows, tufts, flowers, heather; see `groundPatterns.ts`.
  *
- * They are procedural, so there is no mip chain to filter them: past the point
- * where a wavelength falls below a pixel they alias, and the aliasing crawls as
- * the player walks. Fading them leaves the mottle — which is coarse enough to
- * survive — doing the work at distance, which is also where the crisp cell edges
- * are meant to read as a data product.
+ * Off on low-power devices: it is the heaviest part of a full-screen fragment
+ * shader, and a phone is exactly where that matters.
  */
-const DETAIL_NEAR_M = 45;
-const DETAIL_FAR_M = 170;
+const GROUND_PATTERNS = !isLowPower();
 
 /**
  * How hard the darker half of the detail warms towards bare soil.
@@ -65,10 +68,18 @@ const DETAIL_FAR_M = 170;
  * well above 1 to be visible at all; 4 saturates the tint in the deepest
  * hollows and leaves most of the ground barely touched.
  */
-const SOIL_TINT_GAIN = 4;
+const SOIL_TINT_GAIN = 3;
 
 /**
- * Warm, saturated, low-contrast — the Animal Crossing palette.
+ * Half-width of the blend band at a land-cover cell edge, as a fraction of a
+ * cell. 0 is hard nearest, 0.5 is full bilinear.
+ */
+const COVER_EDGE_SOFTNESS = 0.2;
+
+/**
+ * Bright, slightly desaturated pastels — the soft toy-diorama palette. Every
+ * class sits high in lightness so that, under the high-key lighting, the
+ * landscape reads as sunny felt and painted wood rather than as terrain.
  *
  * Arable is the odd one out and deliberately so: it is drawn as tilled earth
  * rather than as a crop, because it is the cover carrying five times the
@@ -76,20 +87,20 @@ const SOIL_TINT_GAIN = 4;
  * from a hilltop, without turning the risk overlay on.
  */
 export const COVER_COLOURS: Record<LandCover, [number, number, number]> = {
-  [LandCover.Woodland]: [0x46, 0x7d, 0x40],
-  [LandCover.Arable]: [0xbd, 0xa2, 0x74],
-  [LandCover.ImprovedGrassland]: [0x8d, 0xb8, 0x5e],
-  [LandCover.ExtensiveGrassland]: [0x9e, 0xb0, 0x74],
-  [LandCover.Moorland]: [0x96, 0x8c, 0x72],
-  [LandCover.Urban]: [0xbc, 0xac, 0x9c],
-  [LandCover.Water]: [0x5a, 0xa9, 0xd6],
+  [LandCover.Woodland]: [0xa3, 0xcc, 0x8e],
+  [LandCover.Arable]: [0xe6, 0xcb, 0x9c],
+  [LandCover.ImprovedGrassland]: [0xc2, 0xe0, 0x96],
+  [LandCover.ExtensiveGrassland]: [0xd2, 0xdc, 0xa2],
+  [LandCover.Moorland]: [0xcb, 0xb8, 0xae],
+  [LandCover.Urban]: [0xe4, 0xda, 0xcf],
+  [LandCover.Water]: [0xa3, 0xd6, 0xe6],
 };
 
 /**
  * Per-cell brightness jitter, as a fraction.
  *
- * Flat colour over a whole field reads as a texture-less plane once the toon
- * ramp has already flattened the shading. A few percent of deterministic
+ * Flat colour over a whole field reads as a texture-less plane under soft,
+ * even lighting that does little to model it. A few percent of deterministic
  * variation gives the surface some tooth without reading as noise.
  */
 const JITTER = 0.028;
@@ -99,12 +110,12 @@ const JITTER = 0.028;
  *
  * Darker, and green rather than yellow — the red channel gives up the most and
  * the green the least, which is how wet grass differs from dry in the field
- * rather than simply being a shadow. It has to survive the toon ramp flattening
- * everything it sits under, so it is a stronger multiply than it looks: at a
+ * rather than simply being a shadow. It has to survive the high-key lighting
+ * and pastel ground it sits in, so it is a stronger multiply than it looks: at a
  * channel head the corridor needs to be findable from a hundred metres away,
  * because finding one is a thing the game actually asks the player to do.
  */
-const DAMP_TINT: [number, number, number] = [0.74, 0.88, 0.84];
+const DAMP_TINT: [number, number, number] = [0.8, 0.92, 0.92];
 
 /**
  * How much of its sky fill a fully enclosed hollow gives up.
@@ -112,19 +123,20 @@ const DAMP_TINT: [number, number, number] = [0.74, 0.88, 0.84];
  * Applied to the indirect term only, which is the hemisphere light standing in
  * for sky and bounce — the quantity sky-view openness actually describes.
  */
-const AO_INDIRECT = 0.55;
+const AO_INDIRECT = 0.7;
 
 /**
  * How much of the *sun* the same hollow gives up.
  *
  * Not physical: direct sun is either blocked or it is not, and the shadow map
- * already answers that. But the shadow map only covers 55 m around the player,
- * so past that the question goes unanswered and every distant hillside comes
+ * already answers that. But the shadow map only covers a region around the
+ * player (60 m at the default zoom; see lighting.ts), so past that the
+ * question goes unanswered and every distant hillside comes
  * back flat. A quarter of the occlusion term on direct light is enough to put
  * the landform back into the middle distance, and small enough not to read as
  * a second, softer sun.
  */
-const AO_DIRECT = 0.25;
+const AO_DIRECT = 0.32;
 
 /**
  * What both terms fall to under the risk overlay.
@@ -157,7 +169,9 @@ export function createLandCoverTexture(
   }
 
   const texture = new THREE.DataTexture(data, spec.width, spec.height, THREE.RGBAFormat);
-  texture.magFilter = THREE.NearestFilter;
+  // Linear, because the shader does its own soft-nearest lookup on top; see
+  // the note at the head of this file.
+  texture.magFilter = THREE.LinearFilter;
   texture.minFilter = THREE.LinearMipmapLinearFilter;
   texture.generateMipmaps = true;
   texture.anisotropy = 4;
@@ -166,21 +180,33 @@ export function createLandCoverTexture(
   return texture;
 }
 
-/** Rewrite the colours of cells whose land cover changed, without reallocating. */
-export function updateLandCoverTexture(
-  texture: THREE.DataTexture,
-  landCover: Uint8Array,
-  cells: readonly number[],
-): void {
-  const data = texture.image.data as Uint8Array;
-  for (const cell of cells) {
-    const colour = COVER_COLOURS[landCover[cell] as LandCover];
-    if (!colour) continue;
-    data[cell * 4] = colour[0];
-    data[cell * 4 + 1] = colour[1];
-    data[cell * 4 + 2] = colour[2];
+/**
+ * Which ground texture each cell wears: arable in red, improved grassland in
+ * green, extensive grassland in blue, moorland in alpha.
+ *
+ * Weights rather than a class index because the shader samples it with the
+ * same soft-nearest lookup as the colours, and weights blend meaningfully
+ * across a field boundary where an index would pass through classes that are
+ * on neither side of it.
+ */
+export function createCoverPatternTexture(landCover: Uint8Array, spec: GridSpec): THREE.DataTexture {
+  const data = new Uint8Array(landCover.length * 4);
+  for (let i = 0; i < landCover.length; i++) {
+    const cover = landCover[i] as LandCover;
+    data[i * 4] = cover === LandCover.Arable ? 255 : 0;
+    data[i * 4 + 1] = cover === LandCover.ImprovedGrassland ? 255 : 0;
+    data[i * 4 + 2] = cover === LandCover.ExtensiveGrassland ? 255 : 0;
+    data[i * 4 + 3] = cover === LandCover.Moorland ? 255 : 0;
   }
+
+  const texture = new THREE.DataTexture(data, spec.width, spec.height, THREE.RGBAFormat);
+  texture.magFilter = THREE.LinearFilter;
+  texture.minFilter = THREE.LinearMipmapLinearFilter;
+  texture.generateMipmaps = true;
+  // Weights, not colours: no decode curve.
+  texture.colorSpace = THREE.NoColorSpace;
   texture.needsUpdate = true;
+  return texture;
 }
 
 /** The risk overlay texture the worker packs into. */
@@ -200,11 +226,12 @@ export interface TerrainMaterial {
   readonly material: THREE.MeshToonMaterial;
   /** 0 hides the risk overlay, 1 shows it fully. Animated on the M key. */
   setOverlayMix(value: number): void;
-  swapOverlay(texture: THREE.Texture): void;
 }
 
 export interface TerrainMaterialOptions {
   readonly landCover: THREE.Texture;
+  /** Per-cover texture weights; see `createCoverPatternTexture`. */
+  readonly coverPattern: THREE.Texture;
   readonly overlay: THREE.Texture;
   /** Sky-view openness in red, wetness in green. See `terrainData.ts`. */
   readonly terrainData: THREE.Texture;
@@ -218,6 +245,7 @@ export function createTerrainMaterial(options: TerrainMaterialOptions): TerrainM
   const uOverlay = { value: options.overlay };
   const uOverlayMix = { value: 0 };
   const uTerrainData = { value: options.terrainData };
+  const uCoverPattern = { value: options.coverPattern };
 
   const material = new THREE.MeshToonMaterial({
     map: options.landCover,
@@ -232,6 +260,7 @@ export function createTerrainMaterial(options: TerrainMaterialOptions): TerrainM
     shader.uniforms.uOverlay = uOverlay;
     shader.uniforms.uOverlayMix = uOverlayMix;
     shader.uniforms.uTerrainData = uTerrainData;
+    shader.uniforms.uCoverPattern = uCoverPattern;
 
     shader.fragmentShader = shader.fragmentShader
       .replace(
@@ -240,37 +269,10 @@ export function createTerrainMaterial(options: TerrainMaterialOptions): TerrainM
         uniform sampler2D uOverlay;
         uniform float uOverlayMix;
         uniform sampler2D uTerrainData;
+        uniform sampler2D uCoverPattern;
 
-        // Value noise, hashed rather than sampled: a texture lookup would need a
-        // texture to author, ship and bind, and the ground only needs something
-        // stationary and band-limited to break its own flatness.
-        //
-        // The multiply is by a small constant and the fract comes first, which
-        // is the part that matters. The finest octave has a 0.85 m wavelength
-        // and the catchment is 1024 m across, so its lattice coordinate reaches
-        // about 1200 — and hashing that by multiplying up to five figures first
-        // spends the whole float32 mantissa before the fract, collapsing 3600
-        // lattice cells at the far corner onto 235 distinct values. The far
-        // corner of the map then tiles visibly.
-        float cwHash(vec2 cell) {
-          vec3 p = fract(vec3(cell.xyx) * 0.1031);
-          p += dot(p, p.yzx + 33.33);
-          return fract((p.x + p.y) * p.z);
-        }
-
-        float cwNoise(vec2 p) {
-          vec2 cell = floor(p);
-          vec2 f = fract(p);
-          // Smoothstep weights, so the lattice does not show as a square grid of
-          // creases — which, on ground already drawn in 4 m squares, would read
-          // as a second and wrong grid.
-          vec2 w = f * f * (3.0 - 2.0 * f);
-          float a = cwHash(cell);
-          float b = cwHash(cell + vec2(1.0, 0.0));
-          float c = cwHash(cell + vec2(0.0, 1.0));
-          float d = cwHash(cell + vec2(1.0, 1.0));
-          return mix(mix(a, b, w.x), mix(c, d, w.x), w.y);
-        }`,
+        ${GLSL_NOISE}
+        ${GROUND_PATTERNS ? GROUND_PATTERN_FUNCTIONS : ""}`,
       )
       // Ground detail first, then the overlay on top of it: the risk map is the
       // one layer that has to stay legible, and grain applied over it would put
@@ -280,22 +282,46 @@ export function createTerrainMaterial(options: TerrainMaterialOptions): TerrainM
       // floating above it.
       .replace(
         "#include <map_fragment>",
-        /* glsl */ `#include <map_fragment>
+        /* glsl */ `
+        // Soft-nearest land cover: remap the fractional texel position so it
+        // holds flat across the middle of a cell and ramps only near its edge,
+        // then let linear filtering do the blend. The gradients passed are
+        // those of the *unmodified* coordinate, or the remap's steep sections
+        // would trip the mip selector and draw a seam at every cell boundary.
+        vec2 cwTexels = vec2(${options.spec.width.toFixed(1)}, ${options.spec.height.toFixed(1)});
+        vec2 cwP = vMapUv * cwTexels - 0.5;
+        vec2 cwCell = floor(cwP);
+        vec2 cwFrac = smoothstep(0.5 - ${COVER_EDGE_SOFTNESS.toFixed(3)}, 0.5 + ${COVER_EDGE_SOFTNESS.toFixed(3)}, cwP - cwCell);
+        vec2 cwCoverUv = (cwCell + cwFrac + 0.5) / cwTexels;
+        vec2 cwUvDx = dFdx(vMapUv);
+        vec2 cwUvDy = dFdy(vMapUv);
+        diffuseColor *= textureGrad(map, cwCoverUv, cwUvDx, cwUvDy);
+
+        // Ground position in metres, and the metres one pixel covers there —
+        // the larger of the two screen directions, so detail seen at a grazing
+        // angle fades on the axis where it is most foreshortened. Taken here,
+        // in uniform control flow, because derivatives inside the pattern
+        // branches below would be undefined.
+        vec2 cwGround = vMapUv * ${extentM.toFixed(1)};
+        float cwMpp = max(length(cwUvDx), length(cwUvDy)) * ${extentM.toFixed(1)};
+
         // Sampled once at main() scope: the damp tint uses it here, and the
         // occlusion that replaces <aomap_fragment> uses it after the lights.
         vec4 cwTerrain = texture2D(uTerrainData, vMapUv);
         float cwShade = cwTerrain.r;
         float cwWetness = cwTerrain.g;
         {
-          vec2 cwGround = vMapUv * ${extentM.toFixed(1)};
           float cwMottle = cwNoise(cwGround / ${MOTTLE_M.toFixed(2)});
           float cwGrain = cwNoise(cwGround / ${GRAIN_M.toFixed(2)});
           float cwTooth = cwNoise(cwGround / ${TOOTH_M.toFixed(2)});
 
-          float cwNear = 1.0 - smoothstep(${DETAIL_NEAR_M.toFixed(1)}, ${DETAIL_FAR_M.toFixed(1)}, length(vViewPosition));
+          // Each octave fades by its own wavelength against the pixel
+          // footprint — see groundPatterns.ts for why not by distance.
+          float cwGrainShown = smoothstep(1.5, 4.0, ${GRAIN_M.toFixed(2)} / max(cwMpp, 1e-4));
+          float cwToothShown = smoothstep(1.5, 4.0, ${TOOTH_M.toFixed(2)} / max(cwMpp, 1e-4));
           float cwDetail = (cwMottle - 0.5) * ${MOTTLE_STRENGTH.toFixed(3)}
-                         + (cwGrain - 0.5) * ${GRAIN_STRENGTH.toFixed(3)} * cwNear
-                         + (cwTooth - 0.5) * ${TOOTH_STRENGTH.toFixed(3)} * cwNear;
+                         + (cwGrain - 0.5) * ${GRAIN_STRENGTH.toFixed(3)} * cwGrainShown
+                         + (cwTooth - 0.5) * ${TOOTH_STRENGTH.toFixed(3)} * cwToothShown;
 
           diffuseColor.rgb *= 1.0 + cwDetail;
           // The darker half warms rather than simply dimming, so a hollow reads
@@ -306,6 +332,14 @@ export function createTerrainMaterial(options: TerrainMaterialOptions): TerrainM
             diffuseColor.rgb * vec3(1.08, 0.97, 0.86),
             min(1.0, max(-cwDetail, 0.0) * ${SOIL_TINT_GAIN.toFixed(1)})
           );
+        }
+        ${
+          GROUND_PATTERNS
+            ? `{
+          vec4 cwPattern = textureGrad(uCoverPattern, cwCoverUv, cwUvDx, cwUvDy);
+          ${GROUND_PATTERN_APPLY}
+        }`
+            : ""
         }
 
         // Damp ground, from the same accumulation the model routes on. Under the
@@ -340,9 +374,6 @@ export function createTerrainMaterial(options: TerrainMaterialOptions): TerrainM
     material,
     setOverlayMix(value) {
       uOverlayMix.value = value;
-    },
-    swapOverlay(texture) {
-      uOverlay.value = texture;
     },
   };
 }

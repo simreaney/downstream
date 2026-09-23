@@ -14,7 +14,7 @@ export interface Intervention {
   readonly kind: InterventionKind;
   readonly id: number;
   readonly cell: number;
-  /** Elapsed game seconds when it was built, for maturing saplings. */
+  /** Elapsed game seconds when it was built. Recorded in saves; nothing reads it yet. */
   readonly at: number;
 }
 

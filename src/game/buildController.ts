@@ -16,7 +16,7 @@
 
 import * as THREE from "three";
 import type { GridSpec } from "../core/grid";
-import { cellAreaM2, N8_DCOL, N8_DIST, N8_DROW } from "../core/grid";
+import { cellAreaM2 } from "../core/grid";
 import { capacityCells } from "../scimap/twi";
 import type { WorldScene } from "../render/scene";
 import { cellToWorld } from "../render/terrainMesh";
@@ -31,8 +31,9 @@ import {
   type Intervention,
   type InterventionKind,
 } from "./interventions";
+import { formatArea } from "./format";
 import type { Inventory } from "./inventory";
-import { checkPlacement, discFootprint, plantingHelps, type PlacementContext } from "./validity";
+import { checkPlacement, discFootprint, footprintOf, plantingHelps, type PlacementContext } from "./validity";
 
 /** Scale a newly planted tree is drawn at, and a stable per-tree rotation. */
 const PLANTED_SCALE = 0.5;
@@ -45,8 +46,6 @@ export interface BuildResult {
 
 export interface BuildController {
   readonly interventions: readonly Intervention[];
-  readonly occupied: ReadonlySet<number>;
-  context(): PlacementContext;
   /** Evaluate a target without committing to it, for the ghost. */
   preview(kind: InterventionKind, cell: number): ReturnType<typeof checkPlacement>;
   place(kind: InterventionKind, cell: number, at: number): Promise<BuildResult>;
@@ -121,7 +120,10 @@ export function createBuildController(options: BuildOptions): BuildController {
       propHandles.set(feature.id, null);
     } else {
       const rotationY = damRotation(scene.arrays, spec, feature.cell);
-      damGroups.set(feature.id, scene.damFactory(at, rotationY));
+      // On the carved river bed rather than at the model's ground level, so the
+      // lowest log sits in the water with the stream running through the gaps.
+      const onBed = at.clone().setY(scene.groundDem[feature.cell]);
+      damGroups.set(feature.id, scene.damFactory(onBed, rotationY));
       propHandles.set(feature.id, null);
     }
   };
@@ -139,12 +141,8 @@ export function createBuildController(options: BuildOptions): BuildController {
       }
       const cover = coverOf(feature.kind);
       if (cover !== null) {
-        if (feature.kind === "pond") {
-          for (const cell of discFootprint(spec, feature.cell, POND_RADIUS_CELLS)) {
-            coverEdits.push({ cell, cover });
-          }
-        } else {
-          coverEdits.push({ cell: feature.cell, cover });
+        for (const cell of footprintOf(spec, feature.kind, feature.cell)) {
+          coverEdits.push({ cell, cover });
         }
       }
     }
@@ -158,10 +156,36 @@ export function createBuildController(options: BuildOptions): BuildController {
     options.onRecomputed(result.overlay, result.metrics);
   };
 
+  /**
+   * Take a feature back out of the world: refund it, free its footprint and
+   * remove whatever it put on screen. The caller has already taken it off
+   * `interventions`, and re-solves afterwards.
+   */
+  const removeFeature = (feature: Intervention): void => {
+    const cost = costOf(feature.kind);
+    inventory.refund(cost.wood, cost.stone);
+    for (const cell of footprintOf(spec, feature.kind, feature.cell)) occupied.delete(cell);
+
+    const prop = propHandles.get(feature.id);
+    if (prop?.batch === "willow") scene.scatter.willow.remove(prop.handle);
+    propHandles.delete(feature.id);
+
+    const pond = pondHandles.get(feature.id);
+    if (pond !== undefined) {
+      scene.ponds.remove(pond);
+      pondHandles.delete(feature.id);
+      restore(scene, spec, feature.cell);
+    }
+
+    const dam = damGroups.get(feature.id);
+    if (dam) {
+      dam.removeFromParent();
+      damGroups.delete(feature.id);
+    }
+  };
+
   return {
     interventions,
-    occupied,
-    context: buildContext,
 
     preview(kind, cell) {
       return checkPlacement(kind, buildContext(), cell);
@@ -186,7 +210,16 @@ export function createBuildController(options: BuildOptions): BuildController {
       addProps(feature, position);
 
       const helpful = kind !== "tree" || plantingHelps(scene.arrays, cell);
-      await resolve();
+      try {
+        await resolve();
+      } catch (error) {
+        // The model never took the feature, so neither should the world or the
+        // inventory: a build that half-happened would show a pond the score
+        // does not know about, bought with stone the player no longer has.
+        interventions.pop();
+        removeFeature(feature);
+        throw error;
+      }
 
       return {
         placed: true,
@@ -201,11 +234,7 @@ export function createBuildController(options: BuildOptions): BuildController {
         const restored: Intervention = { ...feature, id: nextId++ };
         interventions.push(restored);
 
-        const footprint =
-          feature.kind === "pond"
-            ? discFootprint(spec, feature.cell, POND_RADIUS_CELLS)
-            : [feature.cell];
-        for (const cell of footprint) occupied.add(cell);
+        for (const cell of footprintOf(spec, feature.kind, feature.cell)) occupied.add(cell);
 
         cellToWorld(spec, feature.cell, position);
         position.y = scene.arrays.dem[feature.cell];
@@ -218,32 +247,7 @@ export function createBuildController(options: BuildOptions): BuildController {
       const feature = interventions.pop();
       if (!feature) return { placed: false, message: "Nothing to undo" };
 
-      const cost = costOf(feature.kind);
-      inventory.refund(cost.wood, cost.stone);
-
-      const footprint =
-        feature.kind === "pond"
-          ? discFootprint(spec, feature.cell, POND_RADIUS_CELLS)
-          : [feature.cell];
-      for (const cell of footprint) occupied.delete(cell);
-
-      const prop = propHandles.get(feature.id);
-      if (prop?.batch === "willow") scene.scatter.willow.remove(prop.handle);
-      propHandles.delete(feature.id);
-
-      const pond = pondHandles.get(feature.id);
-      if (pond !== undefined) {
-        scene.ponds.remove(pond);
-        pondHandles.delete(feature.id);
-        restore(scene, spec, feature.cell);
-      }
-
-      const dam = damGroups.get(feature.id);
-      if (dam) {
-        dam.removeFromParent();
-        damGroups.delete(feature.id);
-      }
-
+      removeFeature(feature);
       await resolve();
       return { placed: true, message: `${label(feature.kind)} removed` };
     },
@@ -255,33 +259,19 @@ export function createBuildController(options: BuildOptions): BuildController {
  * channel rather than along it.
  *
  * A dam built along the direction of flow lets water straight past it — the
- * whole point of the structure is to sit crosswise. There is no separate flow
- * direction grid on the main thread, so this retraces steepest descent from
- * the DEM directly, the same rule `scimap/d8.ts` uses to build the routing
- * network on the worker side.
+ * whole point of the structure is to sit crosswise. The direction is the
+ * worker's own D8 successor, not steepest descent re-derived here: see
+ * `MainThreadArrays.downstream` for why the main thread's DEM cannot answer
+ * that on a filled valley floor.
  */
 function damRotation(arrays: MainThreadArrays, spec: GridSpec, cell: number): number {
-  const row = (cell / spec.width) | 0;
-  const col = cell % spec.width;
-  const dem = arrays.dem;
-  const z = dem[cell];
-
-  let bestGrad = 0;
-  // Falls back to spanning east-west if every neighbour is flat or higher,
-  // which only happens right at a filled pit or the map edge.
+  const next = arrays.downstream[cell];
+  // Falls back to spanning east-west at the outlet, which has no successor.
   let downRow = 0;
   let downCol = 1;
-  for (let k = 0; k < 8; k++) {
-    const nRow = row + N8_DROW[k];
-    const nCol = col + N8_DCOL[k];
-    if (nRow < 0 || nRow >= spec.height || nCol < 0 || nCol >= spec.width) continue;
-
-    const grad = (z - dem[nRow * spec.width + nCol]) / N8_DIST[k];
-    if (grad > bestGrad) {
-      bestGrad = grad;
-      downRow = N8_DROW[k];
-      downCol = N8_DCOL[k];
-    }
+  if (next >= 0) {
+    downRow = ((next / spec.width) | 0) - ((cell / spec.width) | 0);
+    downCol = (next % spec.width) - (cell % spec.width);
   }
 
   // Row maps to world Z and column to world X (see cellToWorld), so rotating
@@ -295,10 +285,6 @@ function label(kind: InterventionKind): string {
   return kind === "pond" ? "Pond" : kind === "dam" ? "Leaky dam" : "Tree";
 }
 
-function formatArea(m2: number): string {
-  const hectares = m2 / 10_000;
-  return hectares >= 1 ? `${hectares.toFixed(1)} ha` : `${Math.round(m2)} m²`;
-}
 
 /** Lower the visible ground into a bowl. Render only — the model never sees it. */
 function excavate(scene: WorldScene, spec: GridSpec, centre: number): void {
@@ -321,8 +307,11 @@ function restore(scene: WorldScene, spec: GridSpec, centre: number): void {
   const row = (centre / spec.width) | 0;
   const col = centre % spec.width;
 
+  // Back to the drawn ground as it was before the pond, not to the model's
+  // DEM: the two differ wherever a river bed was carved, and a pond dug beside
+  // a stream would otherwise un-carve its bank when filled in.
   for (const cell of discFootprint(spec, centre, radius)) {
-    scene.renderDem[cell] = scene.arrays.dem[cell];
+    scene.renderDem[cell] = scene.groundDem[cell];
   }
   scene.terrain.updatePatch(scene.renderDem, col - radius, row - radius, radius * 2 + 1, radius * 2 + 1);
 }

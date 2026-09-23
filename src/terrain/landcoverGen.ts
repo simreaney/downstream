@@ -170,25 +170,3 @@ export function generateLandCover(
   }
   return cover;
 }
-
-/** Stamp a compact block of urban cells, for the village footprint. */
-export function stampUrban(
-  cover: Uint8Array,
-  spec: GridSpec,
-  centre: number,
-  radiusCells: number,
-): void {
-  const { width, height } = spec;
-  const centreRow = (centre / width) | 0;
-  const centreCol = centre % width;
-
-  for (let dRow = -radiusCells; dRow <= radiusCells; dRow++) {
-    for (let dCol = -radiusCells; dCol <= radiusCells; dCol++) {
-      if (dRow * dRow + dCol * dCol > radiusCells * radiusCells) continue;
-      const row = centreRow + dRow;
-      const col = centreCol + dCol;
-      if (row < 0 || row >= height || col < 0 || col >= width) continue;
-      cover[row * width + col] = LandCover.Urban;
-    }
-  }
-}

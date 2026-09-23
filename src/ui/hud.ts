@@ -23,7 +23,7 @@ const MARKUP = `
     <div class="hud__keys">
       <kbd>WASD</kbd> walk &middot; <kbd>F</kbd> build &middot; <kbd>E</kbd> gather &middot;
       <kbd>R</kbd> storm &middot; <kbd>Z</kbd> undo &middot; <kbd>K</kbd> save &middot;
-      <kbd>Tab</kbd> map
+      <kbd>Tab</kbd> map &middot; <kbd>Scroll</kbd>/<kbd>&minus;</kbd><kbd>=</kbd> zoom
     </div>
   </div>
   <div class="toast" id="toast" hidden></div>
@@ -64,6 +64,8 @@ export function createHud(root: HTMLElement): Hud {
 
   let toastTimer = 0;
 
+  let lastReadout = "";
+
   return {
     setInventory(state) {
       wood.textContent = `🪵 ${state.wood}`;
@@ -79,6 +81,11 @@ export function createHud(root: HTMLElement): Hud {
     },
 
     setReadout(message, ok, warn) {
+      // Called every frame; a DOM write only when something changed, or the
+      // page restyles the readout sixty times a second for nothing.
+      const key = `${ok ? 1 : 0}${warn ? 1 : 0}${message}`;
+      if (key === lastReadout) return;
+      lastReadout = key;
       readout.textContent = message;
       readout.classList.toggle("hud__readout--ok", ok && !warn);
       readout.classList.toggle("hud__readout--warn", ok && warn);

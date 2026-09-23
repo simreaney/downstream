@@ -173,6 +173,13 @@ export function erode(
     let sediment = 0;
 
     for (let step = 0; step < params.maxSteps; step++) {
+      // The droplet's position this step, before it moves: erosion takes from
+      // the brush around its cell, and deposition spreads over the four cells
+      // around its exact position — which only happens if `deposit` is given
+      // the fractional position rather than the floored cell, whose offsets
+      // are always zero and would drop every grain on one corner.
+      const fromRow = row;
+      const fromCol = col;
       const cellRow = Math.floor(row);
       const cellCol = Math.floor(col);
       sample(dem, spec, row, col, current);
@@ -211,7 +218,7 @@ export function erode(
             ? Math.min(deltaHeight, sediment)
             : (sediment - capacity) * params.depositRate;
         sediment -= amount;
-        deposit(cellRow, cellCol, amount);
+        deposit(fromRow, fromCol, amount);
       } else {
         const amount = Math.min((capacity - sediment) * params.erodeRate, -deltaHeight);
         for (let b = 0; b < brush.weights.length; b++) {

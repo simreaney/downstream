@@ -71,29 +71,6 @@ export interface FbmOptions {
   frequency: number;
 }
 
-export const DEFAULT_FBM: FbmOptions = {
-  octaves: 6,
-  lacunarity: 2.0,
-  gain: 0.5,
-  frequency: 1.0,
-};
-
-/** Standard fractal Brownian motion, normalised to roughly [-1, 1]. */
-export function fbm(noise: Noise2D, x: number, y: number, options: FbmOptions): number {
-  let frequency = options.frequency;
-  let amplitude = 1;
-  let sum = 0;
-  let norm = 0;
-
-  for (let octave = 0; octave < options.octaves; octave++) {
-    sum += noise(x * frequency, y * frequency) * amplitude;
-    norm += amplitude;
-    frequency *= options.lacunarity;
-    amplitude *= options.gain;
-  }
-  return norm === 0 ? 0 : sum / norm;
-}
-
 /**
  * Ridged multifractal: `1 - |noise|`, squared, with each octave weighted by the
  * one above it.

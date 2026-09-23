@@ -16,7 +16,6 @@ import { nanExtent } from "../../src/core/stats";
 import {
   FD8_MASS_TOLERANCE,
   accumulate,
-  accumulatePair,
   buildFd8Table,
 } from "../../src/scimap/fd8";
 import { accumulateD8, buildDownstreamIndex } from "../../src/scimap/d8";
@@ -154,30 +153,6 @@ describe("accumulate", () => {
   it("gives every cell at least its own contribution", () => {
     const { accum } = buildCatchment(3);
     expect(Array.from(accum).every((a) => a >= 1 - 1e-9)).toBe(true);
-  });
-
-  it("accumulatePair matches two separate accumulations exactly", () => {
-    const { terrain, table, spec } = buildCatchment(9001);
-    const n = terrain.dem.length;
-
-    const a = new Float64Array(n);
-    const b = new Float64Array(n);
-    for (let i = 0; i < n; i++) {
-      a[i] = (i % 5) * 0.25;
-      b[i] = 1 + (i % 3);
-    }
-
-    const separateA = accumulate(table, spec, a);
-    const separateB = accumulate(table, spec, b);
-
-    const pairA = new Float64Array(n);
-    const pairB = new Float64Array(n);
-    accumulatePair(table, spec, a, b, pairA, pairB);
-
-    for (let i = 0; i < n; i++) {
-      expect(pairA[i]).toBe(separateA[i]);
-      expect(pairB[i]).toBe(separateB[i]);
-    }
   });
 });
 

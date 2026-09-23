@@ -26,10 +26,6 @@ export function cellAreaM2(spec: GridSpec): number {
   return spec.cellSize * spec.cellSize;
 }
 
-export function idx(spec: GridSpec, row: number, col: number): number {
-  return row * spec.width + col;
-}
-
 export function rowOf(spec: GridSpec, index: number): number {
   return (index / spec.width) | 0;
 }
@@ -69,29 +65,16 @@ export const N8_CONTOUR = new Float64Array([
   0.5, 0.354, 0.5, 0.354, 0.5, 0.354, 0.5, 0.354,
 ]);
 
-/** True when (row, col) is inside the grid. */
-export function inBounds(spec: GridSpec, row: number, col: number): boolean {
-  return row >= 0 && row < spec.height && col >= 0 && col < spec.width;
-}
-
-/** True when the cell lies on the outer ring of the grid. */
-export function isBorder(spec: GridSpec, index: number): boolean {
-  const row = rowOf(spec, index);
-  const col = colOf(spec, index);
-  return row === 0 || col === 0 || row === spec.height - 1 || col === spec.width - 1;
-}
-
-/** Set every cell outside `mask` to NaN, in place. */
-export function applyMask(data: Float64Array, mask: Uint8Array): Float64Array {
-  for (let i = 0; i < data.length; i++) {
-    if (!mask[i]) data[i] = NaN;
+/** Set every cell within `radius` of `cell` (a square, clipped to the grid) in `mask`. */
+export function markSquare(mask: Uint8Array, spec: GridSpec, cell: number, radius: number): void {
+  const row = rowOf(spec, cell);
+  const col = colOf(spec, cell);
+  for (let dRow = -radius; dRow <= radius; dRow++) {
+    for (let dCol = -radius; dCol <= radius; dCol++) {
+      const r = row + dRow;
+      const c = col + dCol;
+      if (r < 0 || r >= spec.height || c < 0 || c >= spec.width) continue;
+      mask[r * spec.width + c] = 1;
+    }
   }
-  return data;
-}
-
-/** Validity mask: finite values only. */
-export function finiteMask(data: ArrayLike<number>): Uint8Array {
-  const mask = new Uint8Array(data.length);
-  for (let i = 0; i < data.length; i++) mask[i] = Number.isFinite(data[i]) ? 1 : 0;
-  return mask;
 }

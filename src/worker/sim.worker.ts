@@ -62,6 +62,7 @@ self.onmessage = (event: MessageEvent<SimRequest>): void => {
         const accum = Float32Array.from(arrays.accum);
         const channelMask = Uint8Array.from(arrays.channelMask);
         const landCover = Uint8Array.from(arrays.landCover);
+        const downstream = Int32Array.from(arrays.downstream);
 
         post(
           {
@@ -76,8 +77,10 @@ self.onmessage = (event: MessageEvent<SimRequest>): void => {
             accum: accum.buffer,
             channelMask: channelMask.buffer,
             landCover: landCover.buffer,
+            downstream: downstream.buffer,
             overlay: result.overlay,
             reaches: result.reaches,
+            reachRisk: result.reachRisk.buffer,
             sites: result.sites,
             bounds: result.world.bounds,
             baseline: result.baseline,
@@ -90,7 +93,9 @@ self.onmessage = (event: MessageEvent<SimRequest>): void => {
             accum.buffer,
             channelMask.buffer,
             landCover.buffer,
+            downstream.buffer,
             result.overlay,
+            result.reachRisk.buffer,
           ],
         );
         break;

@@ -1,46 +1,58 @@
 /**
  * Toon shading ramp.
  *
- * `MeshToonMaterial` quantises its diffuse lighting through a gradient map, so
- * the number of steps in this texture is literally the number of shading bands
- * in the world. Four is the Animal Crossing register: enough to read form, few
- * enough that surfaces stay flat blocks of colour rather than turning into
- * gradients.
+ * `MeshToonMaterial` reads its diffuse lighting through a gradient map indexed by
+ * `N·L * 0.5 + 0.5`, so the shape of this texture is the shape of the light
+ * falloff on every surface in the world.
  *
- * The steps are deliberately not evenly spaced. Real toon art gives the lit side
- * most of the range and compresses the shadow side, so that the terrain reads as
- * brightly lit with a crisp terminator rather than as half-dark.
+ * It used to be four nearest-sampled steps — hard cel bands. The art direction
+ * is now a soft, toy-like diorama, so the ramp is a smooth curve sampled with
+ * linear filtering: surfaces roll gently from lit to shaded with no visible
+ * terminator line, the way a matte vinyl figure does under an overcast sky.
+ *
+ * Two properties carry the look:
+ *
+ * - **A high floor.** The fully shaded side still receives most of the light.
+ *   On an overcast day the sun barely models form; most of what you see is sky.
+ *   Combined with the strong hemisphere fill in `lighting.ts`, this keeps every
+ *   surface high-key — nothing in the landscape is ever allowed to go gloomy.
+ * - **A late, wide shoulder.** The curve does its turning well past the
+ *   terminator (u = 0.5), so surfaces facing even vaguely towards the light sit
+ *   near full brightness and the shading gradient lives on the far side of forms.
+ *   That is what makes a canopy or a head read as a soft rounded volume rather
+ *   than a half-lit ball.
  */
 
 import * as THREE from "three";
+import { smoothstep } from "../core/clamp";
 
-/**
- * Shade levels from fully shadowed to fully lit.
- *
- * The darkest step carries the whole shadow side of every surface in the world,
- * so it sets how gloomy the landscape is allowed to get. It was 0.42, which was
- * fine while the terrain had no occlusion term of its own; now that a hollow
- * also gives up sky fill, the two compound and a shaded dip in a wood came back
- * nearly black. Lifting the floor pays that back without touching the spacing
- * above it, which is what gives the lit side its range.
- */
-const STEPS = [0.47, 0.7, 0.87, 1.0];
+/** Ramp resolution. Linear filtering does the rest. */
+const RESOLUTION = 64;
+
+/** Brightness of a surface facing directly away from the sun. */
+const FLOOR = 0.52;
+
+/** Where the ramp starts and finishes rising, in ramp coordinates (0.5 = terminator). */
+const RISE_START = 0.22;
+const RISE_END = 0.9;
 
 export function createToonRamp(): THREE.DataTexture {
-  const data = new Uint8Array(STEPS.length * 4);
-  STEPS.forEach((level, i) => {
+  const data = new Uint8Array(RESOLUTION * 4);
+  for (let i = 0; i < RESOLUTION; i++) {
+    const u = i / (RESOLUTION - 1);
+    const level = FLOOR + (1 - FLOOR) * smoothstep(RISE_START, RISE_END, u);
     const value = Math.round(level * 255);
     data[i * 4] = value;
     data[i * 4 + 1] = value;
     data[i * 4 + 2] = value;
     data[i * 4 + 3] = 255;
-  });
+  }
 
-  const texture = new THREE.DataTexture(data, STEPS.length, 1, THREE.RGBAFormat);
-  // Nearest sampling is what makes the bands discrete; linear would restore the
-  // smooth falloff the whole ramp exists to remove.
-  texture.magFilter = THREE.NearestFilter;
-  texture.minFilter = THREE.NearestFilter;
+  const texture = new THREE.DataTexture(data, RESOLUTION, 1, THREE.RGBAFormat);
+  // Linear, so the ramp is a gradient rather than a staircase of 64 bands.
+  texture.magFilter = THREE.LinearFilter;
+  texture.minFilter = THREE.LinearFilter;
+  texture.wrapS = THREE.ClampToEdgeWrapping;
   texture.generateMipmaps = false;
   texture.needsUpdate = true;
   return texture;

@@ -61,7 +61,7 @@ export class MinHeap {
     }
   }
 
-  /** Payload of the smallest key. Call `popKey` first if the key is needed. */
+  /** Payload of the smallest key. Call `peekKey` first if the key is needed. */
   pop(): number {
     const { keys, values } = this;
     if (this.length === 0) return -1;

@@ -1,18 +1,18 @@
 /**
  * Trees.
  *
- * Chunky and low-poly: an icosahedron canopy on a tapered trunk, faceted rather
- * than smooth so the toon ramp's bands catch on flat planes instead of sliding
- * over a sphere. At the density this catchment needs — thousands of them —
- * silhouette is the only thing that reads at distance, so the detail budget goes
- * on the outline: a canopy lumpy enough to look grown rather than moulded, a
- * trunk that flares where it meets the ground, and a fir whose branch tiers step
- * outwards.
+ * Soft toy trees: a short, chunky trunk under an oversized rounded canopy, with
+ * smooth normals so the gradient toon ramp rolls over the crown instead of
+ * catching on facets. The proportions are chibi on purpose — big heads on small
+ * bodies — which is what lets a wood read as a cosy cluster of rounded shapes
+ * from the diorama camera rather than as a dark wall.
  *
- * Subdivision drops a level on low-power devices. A broadleaf canopy is 320
- * triangles at detail 2 and 80 at detail 1, and with thousands of instances each
- * drawn twice — once more for the shadow map — that one level is most of the
- * vegetation budget on a phone.
+ * A broadleaf crown is a cluster of overlapping blobs rather than one sphere.
+ * One sphere reads as a lollipop; three read as foliage.
+ *
+ * Subdivision drops a level on low-power devices. With thousands of instances
+ * each drawn twice — once more for the shadow map — that one level is most of
+ * the vegetation budget on a phone.
  *
  * Three species, and the distinction is functional rather than decorative.
  * Willow is reserved for riparian planting, so a continuous buffer along a
@@ -21,49 +21,49 @@
  */
 
 import * as THREE from "three";
+import { mergeGeometries } from "three/examples/jsm/utils/BufferGeometryUtils.js";
 import { isLowPower } from "../config";
+import { smoothNormals } from "../render/softFinish";
 import { part, type PropAsset, type PropContext } from "./types";
 
-/** Icosahedron subdivisions for a full-size canopy. */
+/**
+ * Icosahedron subdivisions for each blob of a full-size canopy.
+ *
+ * Detail 2 for all three blobs is 540 triangles a tree (three's subdivision
+ * is linear: 20 × (detail + 1)² faces per blob), three times the old faceted
+ * crown. It is spent deliberately: with smooth normals the shading no
+ * longer hides the polygon count, so the silhouette is the only place facets
+ * show, and at one level lower a crown near the camera has visibly straight
+ * edges. Phones get detail 1.
+ */
 const CANOPY_DETAIL = isLowPower() ? 1 : 2;
 
-/** Sides and rings on a trunk. */
-const TRUNK_SIDES = isLowPower() ? 6 : 9;
-const TRUNK_RINGS = 4;
+/** Sides on a trunk. */
+const TRUNK_SIDES = isLowPower() ? 7 : 10;
+const TRUNK_RINGS = 3;
 
-/** Sides on a fir crown, and the number of branch tiers stacked up it. */
-const CONIFER_SIDES = isLowPower() ? 7 : 11;
-const CONIFER_TIERS = 4;
+/** Sides on each tier of a fir, and the number of tiers stacked up it. */
+const CONIFER_SIDES = isLowPower() ? 8 : 12;
+const CONIFER_TIERS = 3;
 
-/** Canopy lumpiness, as a fraction of the radius. */
-const CANOPY_LUMP = 0.22;
+/** Canopy lumpiness, as a fraction of the radius. Low and soft: a cushion, not a rock. */
+const CANOPY_LUMP = 0.1;
 
 /** How far the base of a trunk swells outwards, as a fraction of its radius. */
-const ROOT_FLARE = 0.55;
-
-/** Ring-to-ring step of a fir's branch tiers, and the ragged wobble on their tips. */
-const TIER_STEP = 0.14;
-const TIER_RAGGED = 0.06;
+const ROOT_FLARE = 0.6;
 
 /**
  * A smooth, deterministic radial offset over the unit sphere.
  *
- * Continuous by construction, and that — rather than the shape it happens to
- * make — is the load-bearing property. Icosahedron geometry is non-indexed:
- * every facet carries its own copy of each corner, so displacing vertices by a
- * per-vertex random number pulls the copies of a shared corner apart and tears
- * the canopy into unconnected triangles. At detail 1 the gaps hid inside facets
- * large enough to read as intentional; four times as many facets would have made
- * them obvious. A function of *direction alone* hands every copy of a corner the
- * same answer, so the surface stays welded however finely it is subdivided.
+ * A function of direction alone, so every copy of a shared corner gets the same
+ * answer and the surface stays welded however finely it is subdivided.
  */
 function lumpiness(x: number, y: number, z: number, phase: number): number {
   return (
-    (Math.sin(x * 2.9 + phase) * 0.4 +
-      Math.sin(y * 3.3 - phase * 1.7) * 0.28 +
-      Math.sin(z * 4.1 + phase * 0.6) * 0.32 +
-      Math.sin((x + y + z) * 5.7 - phase * 2.3) * 0.16) /
-    1.16
+    (Math.sin(x * 2.1 + phase) * 0.45 +
+      Math.sin(y * 2.4 - phase * 1.7) * 0.3 +
+      Math.sin(z * 2.7 + phase * 0.6) * 0.35) /
+    1.1
   );
 }
 
@@ -72,47 +72,66 @@ function phaseOf(seed: number): number {
   return (seed % 1024) * 0.0613;
 }
 
-/** Canopy geometry, pushed in and out so it is not an obvious solid. */
-function canopy(radius: number, detail: number, squash: number, seed: number): THREE.BufferGeometry {
-  const geometry = new THREE.IcosahedronGeometry(radius, detail);
-  const position = geometry.getAttribute("position") as THREE.BufferAttribute;
+/** One soft blob: a gently lumpy, smooth-shaded sphere. */
+function blob(
+  radius: number,
+  detail: number,
+  squash: number,
+  seed: number,
+  x: number,
+  y: number,
+  z: number,
+): THREE.BufferGeometry {
+  const raw = new THREE.IcosahedronGeometry(radius, detail);
+  const position = raw.getAttribute("position") as THREE.BufferAttribute;
   const phase = phaseOf(seed);
 
-  // The geometry is shared by every instance, so this runs once and gives the
-  // species a silhouette rather than giving each tree one.
   for (let i = 0; i < position.count; i++) {
-    const x = position.getX(i);
-    const y = position.getY(i);
-    const z = position.getZ(i);
-    const inverse = 1 / Math.max(1e-6, Math.sqrt(x * x + y * y + z * z));
-    const scale = 1 + lumpiness(x * inverse, y * inverse, z * inverse, phase) * CANOPY_LUMP;
-    position.setXYZ(i, x * scale, y * scale * squash, z * scale);
+    const px = position.getX(i);
+    const py = position.getY(i);
+    const pz = position.getZ(i);
+    const inverse = 1 / Math.max(1e-6, Math.sqrt(px * px + py * py + pz * pz));
+    const scale = 1 + lumpiness(px * inverse, py * inverse, pz * inverse, phase) * CANOPY_LUMP;
+    position.setXYZ(i, px * scale, py * scale * squash, pz * scale);
   }
-  geometry.computeVertexNormals();
+
+  const geometry = smoothNormals(raw);
+  geometry.translate(x, y, z);
   return geometry;
+}
+
+/**
+ * A broadleaf crown: one main blob with two smaller ones bulging from its
+ * shoulders, so the outline is a soft cloud rather than a ball.
+ */
+function crown(radius: number, squash: number, seed: number, centreY: number): THREE.BufferGeometry {
+  return mergeGeometries([
+    blob(radius, CANOPY_DETAIL, squash, seed, 0, centreY, 0),
+    blob(radius * 0.62, CANOPY_DETAIL, squash, seed + 7, radius * 0.62, centreY - radius * 0.22, radius * 0.18),
+    blob(radius * 0.58, CANOPY_DETAIL, squash, seed + 13, -radius * 0.48, centreY - radius * 0.18, -radius * 0.42),
+  ]);
 }
 
 /**
  * Trunk, swelling into a root flare at the base.
  *
- * The flare matters more than its size suggests: a bare cylinder meeting the
- * ground at a hard edge is the detail that gives away a placed prop, and it is
- * exactly where the player stands when they gather wood.
+ * Welded so the cap and the side share normals along the rim, which rounds the
+ * top edge off instead of leaving a machined crease.
  */
 function trunk(bottom: number, top: number, height: number): THREE.BufferGeometry {
-  const geometry = new THREE.CylinderGeometry(top, bottom, height, TRUNK_SIDES, TRUNK_RINGS);
-  const position = geometry.getAttribute("position") as THREE.BufferAttribute;
+  const raw = new THREE.CylinderGeometry(top, bottom, height, TRUNK_SIDES, TRUNK_RINGS);
+  const position = raw.getAttribute("position") as THREE.BufferAttribute;
 
   for (let i = 0; i < position.count; i++) {
     const y = position.getY(i);
     const t = Math.min(1, Math.max(0, (y + height / 2) / height));
-    // Fourth power, so the swell is confined to the lowest ring or two rather
-    // than turning the whole trunk into a cone.
+    // Fourth power, so the swell is confined to the lowest ring rather than
+    // turning the whole trunk into a cone.
     const flare = 1 + ROOT_FLARE * (1 - t) ** 4;
     position.setXYZ(i, position.getX(i) * flare, y, position.getZ(i) * flare);
   }
-  geometry.computeVertexNormals();
 
+  const geometry = smoothNormals(raw);
   // Origin at the base, so an instance's transform is simply where the tree
   // stands rather than where its middle is.
   geometry.translate(0, height / 2, 0);
@@ -120,63 +139,63 @@ function trunk(bottom: number, top: number, height: number): THREE.BufferGeometr
 }
 
 /**
- * A fir crown: a cone whose rings step alternately in and out, so the profile
- * reads as stacked tiers of branches rather than as a traffic cone. The apex
- * vertices sit on the axis and are left alone, which keeps the tip sharp.
+ * One tier of a fir: a rounded bell, widest just above its base and curling
+ * under at the rim, so a stack of them reads as a soft gumdrop pine.
  */
-function firCrown(radius: number, height: number, seed: number): THREE.BufferGeometry {
-  const geometry = new THREE.ConeGeometry(radius, height, CONIFER_SIDES, CONIFER_TIERS);
-  const position = geometry.getAttribute("position") as THREE.BufferAttribute;
-  const phase = phaseOf(seed);
-
-  for (let i = 0; i < position.count; i++) {
-    const x = position.getX(i);
-    const y = position.getY(i);
-    const z = position.getZ(i);
-    const distance = Math.sqrt(x * x + z * z);
-    if (distance < 1e-5) continue;
-
-    const t = Math.min(1, Math.max(0, (y + height / 2) / height));
-    const ring = Math.round(t * CONIFER_TIERS);
-    // Wide ring: the underside of a tier of branches. Narrow ring: the stem
-    // showing through between two of them.
-    const tier = ring % 2 === 0 ? 1 + TIER_STEP : 1 - TIER_STEP;
-    const ragged = 1 + TIER_RAGGED * Math.sin(Math.atan2(z, x) * 3 + phase + t * 4);
-    const scale = tier * ragged;
-
-    position.setXYZ(i, x * scale, y, z * scale);
-  }
-  geometry.computeVertexNormals();
+function firTier(radius: number, height: number, y: number): THREE.BufferGeometry {
+  const profile = [
+    new THREE.Vector2(0.001, 0),
+    new THREE.Vector2(radius * 0.7, 0.0),
+    new THREE.Vector2(radius * 0.97, height * 0.08),
+    new THREE.Vector2(radius, height * 0.18),
+    new THREE.Vector2(radius * 0.84, height * 0.38),
+    new THREE.Vector2(radius * 0.52, height * 0.68),
+    new THREE.Vector2(radius * 0.2, height * 0.92),
+    new THREE.Vector2(0.001, height),
+  ];
+  const geometry = smoothNormals(new THREE.LatheGeometry(profile, CONIFER_SIDES));
+  geometry.translate(0, y, 0);
   return geometry;
 }
 
+function firCrown(radius: number, height: number): THREE.BufferGeometry {
+  const tiers: THREE.BufferGeometry[] = [];
+  const tierHeight = (height / CONIFER_TIERS) * 1.45;
+  for (let i = 0; i < CONIFER_TIERS; i++) {
+    const t = i / CONIFER_TIERS;
+    tiers.push(firTier(radius * (1 - t * 0.32), tierHeight * (1 - t * 0.12), height * t * 0.72));
+  }
+  return mergeGeometries(tiers);
+}
+
 export function broadleaf(context: PropContext): PropAsset {
-  const height = 4.2;
-  const canopyGeometry = canopy(2.5, CANOPY_DETAIL, 0.85, 0x1234);
-  canopyGeometry.translate(0, height + 1.1, 0);
+  const height = 2.6;
+  const canopyRadius = 2.7;
+  const canopyGeometry = crown(canopyRadius, 0.86, 0x1234, height + canopyRadius * 0.62);
 
   return {
     parts: [
-      part(trunk(0.36, 0.24, height), context.material(0x6b4a2f)),
-      part(canopyGeometry, context.material(0x4f9440)),
+      part(trunk(0.46, 0.32, height + 0.8), context.material(0xb08a66)),
+      part(canopyGeometry, context.material(0x7fc08c)),
     ],
-    radius: 2.5,
-    height: height + 3,
+    radius: canopyRadius,
+    height: height + canopyRadius * 1.5,
   };
 }
 
 export function conifer(context: PropContext): PropAsset {
-  const height = 3.0;
-  const crown = firCrown(1.9, 6.4, 0x5e11);
-  crown.translate(0, height + 3.0, 0);
+  const height = 1.8;
+  const crownHeight = 6.0;
+  const crownGeometry = firCrown(2.1, crownHeight);
+  crownGeometry.translate(0, height, 0);
 
   return {
     parts: [
-      part(trunk(0.3, 0.2, height), context.material(0x5c3f2a)),
-      part(crown, context.material(0x2f6b3c)),
+      part(trunk(0.38, 0.26, height + 0.6), context.material(0xa07c5c)),
+      part(crownGeometry, context.material(0x62ab93)),
     ],
-    radius: 1.9,
-    height: height + 6.4,
+    radius: 2.1,
+    height: height + crownHeight,
   };
 }
 
@@ -187,35 +206,50 @@ export function conifer(context: PropContext): PropAsset {
  * of where the player has already buffered the watercourse.
  */
 export function willow(context: PropContext): PropAsset {
-  const height = 2.6;
-  const canopyGeometry = canopy(2.9, CANOPY_DETAIL, 0.6, 0x9ab1);
-  canopyGeometry.translate(0, height + 0.7, 0);
+  const height = 1.9;
+  const canopyRadius = 3.0;
+  const canopyGeometry = crown(canopyRadius, 0.62, 0x9ab1, height + canopyRadius * 0.45);
 
   return {
     parts: [
-      part(trunk(0.42, 0.3, height), context.material(0x7a6248)),
-      part(canopyGeometry, context.material(0x8fbc63)),
+      part(trunk(0.5, 0.36, height + 0.6), context.material(0xb89878)),
+      part(canopyGeometry, context.material(0xb9dc8c)),
     ],
-    radius: 2.9,
-    height: height + 2.2,
+    radius: canopyRadius,
+    height: height + canopyRadius,
   };
 }
 
-/** A freshly planted whip, before it matures into one of the species above. */
-export function sapling(context: PropContext): PropAsset {
-  const height = 1.1;
-  // One level below the mature canopies: a whip is under a metre across, so its
-  // facets are already smaller on screen than a full canopy's at twice the
-  // subdivision, and there can be hundreds of them in a new planting.
-  const leaves = canopy(0.6, Math.max(0, CANOPY_DETAIL - 1), 1.1, 0x33cc);
-  leaves.translate(0, height + 0.35, 0);
+/**
+ * A round flowering shrub for cottage gardens.
+ *
+ * A soft blob with a few pastel blossoms dotted over its crown — the cheapest
+ * thing that makes a plot read as a garden rather than as field with a house
+ * put down on it.
+ */
+export function bush(context: PropContext): PropAsset {
+  const leaves = blob(0.62, Math.max(0, CANOPY_DETAIL - 1), 0.78, 0x5a17, 0, 0.42, 0);
+
+  const blossoms: THREE.BufferGeometry[] = [];
+  const spots: [number, number, number][] = [
+    [0.28, 0.78, 0.22],
+    [-0.3, 0.72, 0.18],
+    [0.05, 0.86, -0.3],
+    [-0.12, 0.62, 0.46],
+    [0.42, 0.55, -0.2],
+  ];
+  for (const [x, y, z] of spots) {
+    const blossom = new THREE.SphereGeometry(0.085, 8, 6);
+    blossom.translate(x, y, z);
+    blossoms.push(smoothNormals(blossom));
+  }
 
   return {
     parts: [
-      part(trunk(0.09, 0.07, height), context.material(0x7a6248)),
-      part(leaves, context.material(0x93c95c)),
+      part(leaves, context.material(0x8fcf8f)),
+      part(mergeGeometries(blossoms), context.material(0xf7b6c8), { castShadow: false }),
     ],
-    radius: 0.6,
-    height: height + 0.9,
+    radius: 0.62,
+    height: 0.95,
   };
 }

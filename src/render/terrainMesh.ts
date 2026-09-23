@@ -49,13 +49,20 @@ export function worldToCell(spec: GridSpec, x: number, z: number): number {
 }
 
 /**
- * Ground height at a world position, bilinearly interpolated.
+ * Ground height at a world position, on the surface the terrain mesh draws.
  *
  * The player follows this rather than raycasting the terrain mesh. A raycast
  * against 130,000 triangles every frame is wasteful when the surface is a
  * heightfield on a regular grid and the answer is four array reads — and it
  * would also disagree with the visible ground, since the curvature shader
  * displaces the rendered geometry away from what the CPU has.
+ *
+ * Interpolated across the same two triangles per quad the mesh is built from
+ * (split along the b–c diagonal; see `createTerrainMesh`), not bilinearly. The
+ * two agree at the vertices and on planar ground and differ everywhere else by
+ * up to a quarter of the quad's twist, which on a valley floor is tens of
+ * centimetres. That was enough to leave props hovering, feet sunk, and the
+ * river ribbon — which is meant to lie in its bed — dipping under the banks.
  */
 export function sampleHeight(dem: Float32Array, spec: GridSpec, x: number, z: number): number {
   const { width, height, cellSize } = spec;
@@ -72,14 +79,15 @@ export function sampleHeight(dem: Float32Array, spec: GridSpec, x: number, z: nu
   const fz = Math.min(Math.max(gz - row, 0), 1);
 
   const i = row * width + col;
-  const nw = dem[i];
-  const ne = dem[i + 1];
-  const sw = dem[i + width];
-  const se = dem[i + width + 1];
+  const a = dem[i];
+  const b = dem[i + 1];
+  const c = dem[i + width];
+  const d = dem[i + width + 1];
 
-  return (
-    nw * (1 - fx) * (1 - fz) + ne * fx * (1 - fz) + sw * (1 - fx) * fz + se * fx * fz
-  );
+  // Triangle (a, c, b) holds the corner at a; triangle (b, c, d) the corner at d.
+  return fx + fz <= 1
+    ? a + (b - a) * fx + (c - a) * fz
+    : d + (c - d) * (1 - fx) + (b - d) * (1 - fz);
 }
 
 /** Surface normal at a world position, from the same heightfield. */
@@ -157,7 +165,11 @@ export function createTerrainMesh(
 
   const mesh = new THREE.Mesh(geometry, material);
   mesh.receiveShadow = true;
-  mesh.castShadow = true;
+  // Receives, does not cast. With the sun about 42 degrees up, ground can only
+  // shadow itself on slopes steeper than about 48 degrees, which this terrain
+  // barely has — and casting put every one of its triangles through the shadow
+  // pass each frame. Landform shading comes from the baked openness instead.
+  mesh.castShadow = false;
   // The curvature shader displaces vertices, so the CPU bounding sphere no
   // longer describes what is on screen and three would cull the terrain just as
   // the player looked at the horizon.

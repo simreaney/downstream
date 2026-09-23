@@ -267,6 +267,54 @@ captured `const`s in the temporal dead zone. Declaration order was the fix.
 Found only because the screenshot harness prints page errors as they arrive — a
 page that never boots never reaches an end-of-run summary.
 
+### 4.8 Undo refunded the tree but kept its credit
+
+Recompute takes the *complete* current feature list precisely so that undo is
+exact — and for connectivity breaks it was. Cover edits, though, were written
+straight into the worker's only land-cover array, and nothing ever put the
+original back. Undo a tree and the wood came back while the cell stayed
+woodland: still lowering erosion, still counted as a buffer, still in the
+woodland fraction. Undo the last edit and the risk weights were not even
+rebuilt. The worker now keeps the land cover as generated and restores it
+before applying the list on every recompute. The test is simply "edit, then
+recompute with nothing: the metrics equal the baseline" — which had never been
+written, because the undo test only exercised breaks.
+
+### 4.9 The baseline was not what an untouched catchment re-solves to
+
+The frozen baseline came from the full pipeline, which applies no buffer
+breaks; every recompute adds breaks for all existing riparian woodland. So the
+first placement was credited with the effect of woodland that was already
+there, and undoing everything never brought the score back to zero. The
+baseline is now frozen from the same solve a recompute runs, with no features.
+
+### 4.10 Erosion dropped every grain on one corner
+
+The droplet pass deposits bilinearly over four cells — except that `deposit`
+was handed the *floored* cell position, whose fractional offsets are always
+zero, so the four weights were 1, 0, 0, 0. The terrain looked like terrain.
+Fixing it changed every seed's landscape, so `SAVE_VERSION` went to 2 and
+older share codes are refused with a message rather than replayed onto a
+different catchment.
+
+The change is not cosmetic, and it was kept knowingly. The one-cell piles
+had been adding roughness the rest of the generator was tuned around: with
+deposition spread properly, mean slope falls from about 15° to about 12°, so
+fewer cells pass the relict-woodland threshold and more parcels qualify as
+arable. Across four seeds, arable went from 4–10% of the map to 21–28%,
+woodland from 12–21% to about 11%, and the valley floor where the player
+starts is now mostly ploughed. Sweeping the erosion parameters barely moves
+any of this, since the roughness came from the bug rather than from a
+setting. The catchment is now a more agricultural one, with more critical
+source areas to find. Recovering the old balance would mean retuning the base
+relief or the land-cover thresholds, not the erosion.
+
+### 4.11 Flood credit outlived the ponds that earned it
+
+A storm's peak reduction was kept after the ponds and dams it measured were
+undone and refunded. The result is now stamped with the storage it was run
+against, and ignored once that no longer matches.
+
 ---
 
 ## 5. Things that behaved correctly and looked like bugs
@@ -339,3 +387,109 @@ storms and the score continues to compare like with like.
 - **`cfg.pondsAlterDem` exists but is unused.** `fill.ts` already takes a `sinks`
   mask, so the alternative model — ponds burned into the routing DEM, with
   re-routing and spill — can be switched on without restructuring.
+- **Leaky dams do not always lower the outlet peak.** A dam here is pure
+  roughness: it slows its cell and stores nothing. Slowing one branch can line
+  its peak up with another's and *raise* the combined peak — a real timing
+  effect, not a model fault. Across four seeds, a dam on every reach the game
+  allows cuts the peak by 1–3% and always delays it; a handful of dams on a
+  short stub can go either way (40 dams on the full catchment raised it by
+  half a percent before the erosion fix). The test now pins the programme-wide
+  claim, and the storm message no longer says "nothing built" when something
+  was. Whether dams should also store water is a science question.
+
+---
+
+## 9. Art direction: soft toy diorama
+
+The look moved from a four-band cel register to a soft 3D toy diorama: chibi
+proportions, rounded shapes, no outlines, a bright slightly desaturated pastel
+palette, and high-key overcast lighting. The mood rule is that the world stays
+cosy and approachable **even when it is showing damage**: silt is a warm
+caramel haze, storms are lavender-grey, and nothing goes dark. Each piece is
+argued at its call site. In summary:
+
+| Piece | Where | Why |
+|---|---|---|
+| Smooth, high-floored toon ramp | `toonRamp.ts` | Forms roll gently from lit to shaded, and no surface ever falls below about half brightness |
+| Hemisphere-dominated light, faint wide-PCF shadows | `lighting.ts` | Overcast-day evenness; a shadow tints the ground rather than blacking it out |
+| Rim + broad sheen patch | `softFinish.ts` | The matte-vinyl finish, and what separates a prop from the ground without an outline |
+| Baked vertex AO on every prop | `softFinish.ts`, `props/types.ts` | Contact darkening and soft undersides for a few multiplies at load, with no screen-space pass |
+| Soft-nearest land cover | `terrainMaterial.ts` | Fields keep their own colour while the 4 m staircases round off; the risk overlay stays hard-nearest because it is data |
+| 34° FOV from 24 m at ~41° pitch, zoom 11–190 m | `renderer.ts`, `camera.ts` | Tabletop-miniature perspective; pitch stays oblique so the terrain still helps read the risk map |
+| Dithered sight-line cut-out | `occlusionFade.ts` | The high camera puts crowns between it and the player constantly; discard keeps every batch opaque and instanced |
+
+**Water flow.** Rivers draw foam flecks laid out in *travel time* along each
+reach, from a Manning-style velocity (`√slope`, scaled by width). Flecks
+therefore move at the local speed, stretch out on steep reaches, and run
+faster mid-channel than at the banks. Ripples and silt plumes are advected
+along a per-vertex velocity with a two-phase flow map: channel direction for
+rivers, DEM downslope for floodwater, zero for ponds. During a storm the flow
+rate follows the hydrograph, not the rain, so the river keeps quickening after
+the sky clears.
+
+**Cost.** Broadleaf crowns went from 180 to 540 triangles. With smooth normals
+the silhouette is the only place facets show, and one subdivision level lower
+visibly straightens the outline near the camera. Low-power devices drop to 240.
+This is the largest per-frame change and the first thing to revisit if
+vegetation becomes the bottleneck.
+
+**Rivers lie in carved beds.** The ribbon used to be a flat strip at the ground
+height under its centreline. Valley floors rise towards both banks and the
+terrain has a vertex only every 4 m, so streams sank into their own banks and
+resurfaced a few metres on. Now `riverMesh.ts` works in three steps:
+
+1. Lay out each reach with a water level taken from the channel cells and held
+   non-increasing downstream.
+2. Carve a shallow bed into the *render* ground, which the model never sees
+   (like a pond's bowl).
+3. Build a five-vertex-wide ribbon that sits at the water level. It is never
+   below the drawn ground, which is probed conservatively around each vertex,
+   and never floats far above it at the banks.
+
+A related fix: `sampleHeight` now interpolates across the mesh's own two
+triangles per quad rather than bilinearly. The two differ by tens of
+centimetres on a twisted valley-floor quad, which was enough to float props
+and sink the water. The player walks on the carved ground, so they wade.
+
+**Zoom.** The zoom range is 11–190 m, reduced to one log-distance intent from
+the wheel, the `−`/`=` keys, a touch pinch and the gamepad's right-stick click.
+Three things follow the distance:
+
+- The pitch leans over towards a map view.
+- The curved world's bend scales by (24 / distance)², which holds the drop at
+  the focus point constant, so the overview flattens instead of curling into a
+  ball.
+- The shadowed region widens in 15% steps, so edges do not swim during a zoom.
+
+Ground and water detail now fade by **pixel footprint**, not camera distance.
+Distance stops meaning "small on screen" once the camera can zoom.
+
+**Ground texture.** `groundPatterns.ts` adds furrows to arable land, tufts,
+blade strokes and wildflowers to grass (more of each on rough grazing), and
+heather clumps to moorland. The shader reads a per-cover weight texture sampled
+the same soft-nearest way as the colours. The model's field parcels are
+invisible to the shader, so furrows run in its own jittered ~40 m strips, each
+at a hashed angle with a grassy headland between strips. It is all off on
+low-power devices.
+
+**Every catchment has a whole village.** Siting used to look for plots under 9°
+around one point on the trunk, which thinned the village out on steep seeds.
+Now two things guarantee it:
+
+- The whole stretch of trunk above the fishery is scored for room.
+- The slope limit relaxes through 9, 12, 16, 22 and then any slope, and the
+  search radius grows, until all seven cottages have plots.
+
+Plots are never on or beside a channel, since that ground is now a carved bed.
+Cottages stand on a stone plinth that fills the gap on hillside plots. Past
+siting, the village is dressed so it reads as one place rather than seven
+houses dropped on a field:
+
+- Every door faces a shared green.
+- A well stands at the centre, on a round gravel patch.
+- Gently bowed gravel paths lead from each door to it.
+- Shrubs flank each front door.
+- The village and fishery are marked on the overview map.
+
+The fishery hut moved off its channel cell (it used to stand in the river) onto
+the bank beside it, with the jetty over the water.

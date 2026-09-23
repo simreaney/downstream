@@ -42,7 +42,7 @@
 import type { GridSpec } from "../core/grid";
 import { cellAreaM2 } from "../core/grid";
 import { applyStretch, deriveBounds, type Bounds } from "../core/normalise";
-import { accumulatePair, type Fd8Table } from "./fd8";
+import { accumulate, type Fd8Table } from "./fd8";
 import { STRETCH_HIGH, STRETCH_LOW } from "./constants";
 
 /** Guard against dividing by a vanishing contributing area at ridge cells. */
@@ -53,6 +53,14 @@ export interface InChannelScratch {
   readonly dilutionWeights: Float64Array;
   readonly routedLoad: Float64Array;
   readonly routedDilution: Float64Array;
+  /**
+   * The rainfall and flow table `routedDilution` was last routed for. Neither
+   * changes during a session, so the dilution — half of the most expensive
+   * step in a recompute — is routed once and reused until one of them is a
+   * different array.
+   */
+  dilutionRain: Float64Array | null;
+  dilutionTable: Fd8Table | null;
 }
 
 export function createInChannelScratch(n: number): InChannelScratch {
@@ -61,15 +69,18 @@ export function createInChannelScratch(n: number): InChannelScratch {
     dilutionWeights: new Float64Array(n),
     routedLoad: new Float64Array(n),
     routedDilution: new Float64Array(n),
+    dilutionRain: null,
+    dilutionTable: null,
   };
 }
 
 /**
  * Flow-weighted mean source risk delivered to every cell.
  *
- * Both accumulations share one sweep — see `accumulatePair` — because these
- * passes scatter into memory and are bandwidth-bound, so walking the grid twice
- * would cost close to twice as much for identical arithmetic.
+ * The routed load changes with every intervention; the routed dilution
+ * (rainfall-weighted area) depends only on rainfall and the flow table, so it
+ * is routed on the first call and cached in `scratch`. These passes scatter
+ * into memory and are bandwidth-bound, so skipping one halves this step.
  */
 export function computeInChannelRisk(
   sourceRisk: Float64Array,
@@ -86,12 +97,19 @@ export function computeInChannelRisk(
   const { loadWeights, dilutionWeights, routedLoad, routedDilution } = scratch;
   for (let i = 0; i < n; i++) {
     const risk = sourceRisk[i];
-    const rain = rainfallScaled[i];
     loadWeights[i] = Number.isFinite(risk) ? risk * area : 0;
-    dilutionWeights[i] = Number.isFinite(rain) ? area * rain : 0;
   }
+  accumulate(table, spec, loadWeights, routedLoad);
 
-  accumulatePair(table, spec, loadWeights, dilutionWeights, routedLoad, routedDilution);
+  if (scratch.dilutionRain !== rainfallScaled || scratch.dilutionTable !== table) {
+    for (let i = 0; i < n; i++) {
+      const rain = rainfallScaled[i];
+      dilutionWeights[i] = Number.isFinite(rain) ? area * rain : 0;
+    }
+    accumulate(table, spec, dilutionWeights, routedDilution);
+    scratch.dilutionRain = rainfallScaled;
+    scratch.dilutionTable = table;
+  }
 
   for (let i = 0; i < n; i++) {
     result[i] = routedLoad[i] / (routedDilution[i] + TINY);

@@ -18,11 +18,25 @@
  * you can beat 82" is a link, which is worth having for a lecture.
  */
 
-import { DEFAULT_LANDSCAPE_SIZE, LANDSCAPE_SIZES, type LandscapeSizeId } from "../config";
+import { DEFAULT_LANDSCAPE_SIZE, LANDSCAPE_SIZES, landscapeSpec, type LandscapeSizeId } from "../config";
 import type { Intervention, InterventionKind } from "./interventions";
 
-/** Bumped when the shape below changes in a way older saves cannot satisfy. */
-export const SAVE_VERSION = 1;
+/**
+ * Bumped when the shape below changes in a way older saves cannot satisfy — or
+ * when generation changes, since a save is only meaningful against the exact
+ * catchment its seed produced.
+ */
+export const SAVE_VERSION = 2;
+
+/**
+ * The oldest save this build will restore. Raised alongside `SAVE_VERSION`
+ * whenever generation changes, because an older code would otherwise replay
+ * its features onto a different landscape without any error at all.
+ */
+export const MIN_SAVE_VERSION = 2;
+
+/** Ceiling on restored stock, so a hand-edited code cannot grant unlimited wood. */
+const MAX_STOCK = 999;
 
 export interface SaveData {
   readonly version: number;
@@ -80,28 +94,50 @@ function toWire(save: SaveData): WireSave {
   };
 }
 
+/** A non-negative whole count, or 0 for anything that is not one. */
+function stock(value: unknown): number {
+  return typeof value === "number" && Number.isFinite(value)
+    ? Math.min(MAX_STOCK, Math.max(0, Math.floor(value)))
+    : 0;
+}
+
+/**
+ * Wire form to save, refusing anything that would replay into a broken world.
+ *
+ * Replay deliberately skips placement checks (the features were legal when
+ * they were built), so this is the only gate: a cell off the edge of its own
+ * grid would otherwise reach the renderer as a feature with no ground under it.
+ */
 function fromWire(wire: WireSave): SaveData {
-  const interventions: Intervention[] = [];
-  for (let i = 0; i + 2 < wire.i.length; i += 3) {
-    const kind = KINDS[wire.i[i]];
-    if (!kind) continue;
-    interventions.push({ kind, id: interventions.length + 1, cell: wire.i[i + 1], at: wire.i[i + 2] });
-  }
+  if (!Array.isArray(wire.i)) throw new Error("That does not look like a catchment code");
 
   // An older save with no recorded size predates adjustable sizes, so it was
   // always the shipped default.
   const sizeId =
     LANDSCAPE_SIZES.find((option) => option.id === wire.z)?.id ?? DEFAULT_LANDSCAPE_SIZE;
+  const { width, height } = landscapeSpec(sizeId);
+  const cellCount = width * height;
+
+  const interventions: Intervention[] = [];
+  for (let i = 0; i + 2 < wire.i.length; i += 3) {
+    const kind = KINDS[wire.i[i]];
+    const cell = wire.i[i + 1];
+    if (!kind || !Number.isInteger(cell) || cell < 0 || cell >= cellCount) {
+      throw new Error("That code has a feature outside its landscape");
+    }
+    const at = Number.isFinite(wire.i[i + 2]) ? wire.i[i + 2] : 0;
+    interventions.push({ kind, id: interventions.length + 1, cell, at });
+  }
 
   return {
     version: wire.v,
     seed: wire.s >>> 0,
     sizeId,
-    elapsedSeconds: wire.t,
-    wood: wire.w,
-    stone: wire.n,
+    elapsedSeconds: Number.isFinite(wire.t) ? wire.t : 0,
+    wood: stock(wire.w),
+    stone: stock(wire.n),
     hasSpade: wire.p === 1,
-    collected: wire.c ?? [],
+    collected: Array.isArray(wire.c) ? wire.c.filter((id) => Number.isInteger(id)) : [],
     interventions,
   };
 }
@@ -149,6 +185,11 @@ export async function deserialise(code: string): Promise<SaveData> {
   if (wire.v > SAVE_VERSION) {
     throw new Error(`That save is from a newer version (${wire.v})`);
   }
+  if (wire.v < MIN_SAVE_VERSION) {
+    throw new Error(
+      "That save was made with an older landscape generator, so it would open a different catchment",
+    );
+  }
   return fromWire(wire);
 }
 
@@ -165,12 +206,24 @@ export async function saveToStorage(save: SaveData): Promise<string> {
   return code;
 }
 
-export async function loadFromStorage(): Promise<SaveData | null> {
+/** The locally kept save code, if there is one and storage is readable. */
+export function readStoredCode(): string | null {
   try {
-    const code = localStorage.getItem(STORAGE_KEY);
-    return code ? await deserialise(code) : null;
+    return localStorage.getItem(STORAGE_KEY);
   } catch {
     return null;
+  }
+}
+
+/**
+ * Forget the local save. For one that no longer loads: left in place it would
+ * fail the same way on every visit.
+ */
+export function clearStoredSave(): void {
+  try {
+    localStorage.removeItem(STORAGE_KEY);
+  } catch {
+    // Storage unavailable; nothing to clear.
   }
 }
 

@@ -111,17 +111,6 @@ export function accumulateD8(
   return accum;
 }
 
-/** Walk downstream from `start`, returning the terminating cell. */
-export function walkDownstream(downstream: Int32Array, start: number, maxSteps: number): number {
-  let cell = start;
-  for (let step = 0; step < maxSteps; step++) {
-    const next = downstream[cell];
-    if (next < 0) return cell;
-    cell = next;
-  }
-  return cell;
-}
-
 export interface DrainageReport {
   /** Cells with no downslope neighbour, excluding the expected outlet. */
   readonly interiorSinks: number;

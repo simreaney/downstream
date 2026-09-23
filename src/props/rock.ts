@@ -1,37 +1,41 @@
 /**
  * Boulders — the stone the player gathers for pond construction.
  *
- * A squashed, jittered icosahedron sunk slightly into the ground so it reads as
- * embedded rather than dropped on the surface.
+ * A soft, pebble-like lump rather than a jagged rock: a squashed sphere with a
+ * smooth, low-frequency wobble and welded normals, sunk slightly into the
+ * ground so it reads as embedded rather than dropped on the surface. Sharp
+ * facets are the one thing the toy-diorama look cannot absorb, and a boulder is
+ * where they would otherwise be most obvious.
  */
 
 import * as THREE from "three";
+import { smoothNormals } from "../render/softFinish";
 import { part, type PropAsset, type PropContext } from "./types";
 
 export function boulder(context: PropContext): PropAsset {
-  const geometry = new THREE.IcosahedronGeometry(0.85, 0);
-  const position = geometry.getAttribute("position") as THREE.BufferAttribute;
-
-  let hash = 0x517cc1b7;
-  const random = (): number => {
-    hash = (Math.imul(hash, 1664525) + 1013904223) >>> 0;
-    return hash / 4294967296;
-  };
+  const raw = new THREE.IcosahedronGeometry(0.85, 2);
+  const position = raw.getAttribute("position") as THREE.BufferAttribute;
 
   for (let i = 0; i < position.count; i++) {
-    position.setXYZ(
-      i,
-      position.getX(i) * (1 + (random() - 0.5) * 0.5),
-      position.getY(i) * (0.62 + random() * 0.2),
-      position.getZ(i) * (1 + (random() - 0.5) * 0.5),
-    );
+    const x = position.getX(i);
+    const y = position.getY(i);
+    const z = position.getZ(i);
+    const length = Math.max(1e-6, Math.hypot(x, y, z));
+    // A function of direction, so duplicated corners move together and the
+    // weld below finds them.
+    const nx = x / length;
+    const ny = y / length;
+    const nz = z / length;
+    const wobble = 1 + Math.sin(nx * 2.3 + 1.1) * 0.1 + Math.sin(nz * 2.9 - ny * 1.3) * 0.08;
+    position.setXYZ(i, x * wobble * 1.12, y * wobble * 0.68, z * wobble * 0.95);
   }
-  geometry.computeVertexNormals();
+
+  const geometry = smoothNormals(raw);
   // Bury the base, so the boulder sits in the ground rather than balancing on it.
-  geometry.translate(0, 0.35, 0);
+  geometry.translate(0, 0.3, 0);
 
   return {
-    parts: [part(geometry, context.material(0x9a9793))],
+    parts: [part(geometry, context.material(0xc4c0bb))],
     radius: 0.9,
     height: 1.0,
   };

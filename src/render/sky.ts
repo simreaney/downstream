@@ -16,10 +16,15 @@ import * as THREE from "three";
 const VERTEX = /* glsl */ `
 varying vec3 vWorldDirection;
 void main() {
-  vWorldDirection = normalize((modelMatrix * vec4(position, 0.0)).xyz);
+  vWorldDirection = normalize(position);
+  // Rotation only: the dome is a direction lookup, centred on the camera
+  // wherever it goes. Projecting it with the full model-view matrix left it a
+  // unit sphere at the world origin — a speck hundreds of metres from the
+  // player — so the gradient never reached the screen and the horizon showed
+  // the flat clear colour instead, storm or no storm.
+  vec4 clip = projectionMatrix * vec4(mat3(viewMatrix) * position, 1.0);
   // Force the dome to the far plane so it can never intersect terrain, whatever
   // the camera does.
-  vec4 clip = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
   gl_Position = clip.xyww;
 }`;
 
@@ -46,13 +51,26 @@ export interface Sky {
   setStorminess(value: number): void;
 }
 
-const CLEAR_ZENITH = new THREE.Color(0x3f8fd4);
-const CLEAR_HORIZON = new THREE.Color(0xcfe9f5);
-const CLEAR_GROUND = new THREE.Color(0x8aa06a);
+/**
+ * A pale powder-blue zenith over a warm cream horizon — the soft, milky sky of
+ * a bright overcast day, which is also the fog colour, so distance dissolves
+ * into warmth rather than into blue-grey.
+ */
+const CLEAR_ZENITH = new THREE.Color(0xa9d2ee);
+const CLEAR_HORIZON = new THREE.Color(0xf5ecdc);
+const CLEAR_GROUND = new THREE.Color(0xdfe2c0);
 
-const STORM_ZENITH = new THREE.Color(0x394352);
-const STORM_HORIZON = new THREE.Color(0x8e97a0);
-const STORM_GROUND = new THREE.Color(0x4f5646);
+/**
+ * Storm colours are lavender-grey, not slate.
+ *
+ * A storm is the game's big set piece and the moment it is teaching the most,
+ * so it must read as weather arriving — clearly different — without going dark
+ * and ominous. Soft lilac clouds do that; a charcoal sky would turn the one
+ * scene the player is meant to watch closely into something to flinch from.
+ */
+const STORM_ZENITH = new THREE.Color(0xa6aac8);
+const STORM_HORIZON = new THREE.Color(0xdcd9e4);
+const STORM_GROUND = new THREE.Color(0xc2c4b6);
 
 export function createSky(scene: THREE.Scene): Sky {
   const uniforms = {
@@ -72,8 +90,9 @@ export function createSky(scene: THREE.Scene): Sky {
 
   const mesh = new THREE.Mesh(new THREE.SphereGeometry(1, 32, 16), material);
   mesh.frustumCulled = false;
-  // Drawn first, so the terrain overwrites it rather than blending against it.
-  mesh.renderOrder = -1000;
+  // Drawn after the opaque world: sitting at the far plane, it then only
+  // shades the pixels nothing else covered, instead of the whole screen.
+  mesh.renderOrder = 1000;
   scene.add(mesh);
 
   return {

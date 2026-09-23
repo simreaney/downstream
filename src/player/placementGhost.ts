@@ -47,6 +47,8 @@ export function createPlacementGhost(curvature: CurvatureUniforms): PlacementGho
     opacity: 0.42,
     depthWrite: false,
     side: THREE.DoubleSide,
+    // One pass, not three's two-pass path for transparent double-sided materials.
+    forceSinglePass: true,
   });
   applyCurvature(material, curvature, "ghost");
 

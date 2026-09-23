@@ -9,8 +9,9 @@
  *
  * Every array lives in one `ScimapArrays` object owned by the worker and reused
  * across recomputes, so a placement allocates nothing. The split between what is
- * rebuilt and what is cached is the whole reason the overlay can update live;
- * `incremental.ts` owns that decision, and this module owns the cold path.
+ * rebuilt and what is cached is the whole reason the overlay can update live:
+ * `runFullScimap` is the cold path, and `recomputeFromTwi` and
+ * `recomputeFromWeights` re-solve only what an intervention can change.
  */
 
 import { cellAreaM2, type GridSpec } from "../core/grid";
@@ -19,7 +20,8 @@ import type { ProgressCallback } from "../worker/protocol";
 import { channelThresholdCells } from "./constants";
 import { accumulateD8, buildDownstreamIndex } from "./d8";
 import {
-  computeErosionRisk,
+  computeErosionPotential,
+  weightErosionPotential,
   computeSourceRisk,
   deriveErosionBounds,
   normaliseErosion,
@@ -73,6 +75,8 @@ export interface ScimapArrays {
   readonly networkIndex: Float64Array;
 
   readonly connectivity: Float64Array;
+  /** Area × tan(slope): erosion risk before erodibility, fixed for the session. */
+  readonly erosionPotential: Float64Array;
   readonly erosionRaw: Float64Array;
   readonly erosion: Float64Array;
   readonly sourceRisk: Float64Array;
@@ -156,7 +160,8 @@ export function runFullScimap(
 
   const landCover = landCoverFor(dem, slopeDeg);
   const riskWeight = buildRiskWeight(landCover);
-  const erosionRaw = computeErosionRisk(accum, slopeDeg, riskWeight, area);
+  const erosionPotential = computeErosionPotential(accum, slopeDeg, area);
+  const erosionRaw = weightErosionPotential(erosionPotential, riskWeight, new Float64Array(n));
   const erosionBounds = deriveErosionBounds(erosionRaw);
   const erosion = normaliseErosion(erosionRaw, erosionBounds);
 
@@ -194,6 +199,7 @@ export function runFullScimap(
       twiEffective,
       networkIndex,
       connectivity,
+      erosionPotential,
       erosionRaw,
       erosion,
       sourceRisk,
@@ -267,10 +273,9 @@ export function recomputeFromTwi(
  * erodibility changed, but hydrological connectivity did not.
  */
 export function recomputeFromWeights(arrays: ScimapArrays, bounds: StretchBounds): void {
-  const { spec, accum, slopeDeg, riskWeight, connectivity, rainfallScaled, table } = arrays;
-  const area = cellAreaM2(spec);
+  const { spec, riskWeight, connectivity, rainfallScaled, table } = arrays;
 
-  computeErosionRisk(accum, slopeDeg, riskWeight, area, arrays.erosionRaw);
+  weightErosionPotential(arrays.erosionPotential, riskWeight, arrays.erosionRaw);
   normaliseErosion(arrays.erosionRaw, bounds.erosion, arrays.erosion);
   computeSourceRisk(arrays.erosion, connectivity, arrays.sourceRisk);
 

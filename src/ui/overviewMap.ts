@@ -95,6 +95,20 @@ function buildLandscapeImage(
   return new ImageData(data, width, height);
 }
 
+/**
+ * Landmark icons: a cottage for the village, a fish for the fishery.
+ *
+ * Shapes rather than more coloured dots. The map already carries four kinds of
+ * dot, and the two places a player most wants to find should not have to be
+ * looked up in the key.
+ */
+const VILLAGE_ICON = `<svg viewBox="0 0 12 12" width="16" height="16">
+  <path d="M1.5 6.2 6 2 10.5 6.2 9.4 6.2 9.4 10.4 2.6 10.4 2.6 6.2Z" fill="#e7a08e" stroke="#fdf6e3" stroke-width="1.1" stroke-linejoin="round" />
+</svg>`;
+const FISHERY_ICON = `<svg viewBox="0 0 12 12" width="16" height="16">
+  <path d="M1.8 6c1.6-2.4 4.6-2.8 6.8-0.9L10.6 3.6 10.2 6 10.6 8.4 8.6 6.9C6.4 8.8 3.4 8.4 1.8 6Z" fill="#7eb6e2" stroke="#fdf6e3" stroke-width="1.1" stroke-linejoin="round" />
+</svg>`;
+
 const MARKUP = `
   <div class="overview" id="overview" hidden>
     <div class="overview__panel">
@@ -107,6 +121,8 @@ const MARKUP = `
         <canvas id="overview-canvas"></canvas>
         <div class="overview__nodes" id="overview-nodes"></div>
         <div class="overview__marker overview__marker--outlet" id="overview-outlet" title="Outlet"></div>
+        <div class="overview__marker overview__marker--landmark" id="overview-village" title="Village" hidden>${VILLAGE_ICON}</div>
+        <div class="overview__marker overview__marker--landmark" id="overview-fishery" title="Fishery" hidden>${FISHERY_ICON}</div>
         <div class="overview__marker overview__marker--player" id="overview-player">
           <svg viewBox="0 0 10 10" width="16" height="16" overflow="visible">
             <polygon points="5,1 9,9 5,7 1,9" fill="#fff" stroke="#3d3226" stroke-width="0.8" />
@@ -119,6 +135,8 @@ const MARKUP = `
         <span><i class="overview__swatch overview__swatch--stone"></i>stone</span>
         <span><i class="overview__swatch overview__swatch--spade"></i>spade</span>
         <span><i class="overview__swatch overview__swatch--outlet"></i>outlet</span>
+        <span><i class="overview__key-icon">${VILLAGE_ICON}</i>village</span>
+        <span><i class="overview__key-icon">${FISHERY_ICON}</i>fishery</span>
       </div>
       <div class="overview__hint"><kbd>Tab</kbd> close &middot; <kbd>M</kbd> next layer &middot; <kbd>N</kbd> off</div>
     </div>
@@ -168,6 +186,8 @@ export function createOverviewMap(
   landCover: Uint8Array,
   channelMask: Uint8Array,
   outletCell: number,
+  /** The two receptors, as cells, so the player can find them. */
+  landmarks?: { readonly village: number; readonly fishery: number },
 ): OverviewMap {
   root.insertAdjacentHTML("beforeend", MARKUP);
 
@@ -231,7 +251,21 @@ export function createOverviewMap(
     (outletRow + 0.5) * spec.cellSize - halfHeight,
   );
 
+  if (landmarks) {
+    for (const [id, cell] of [
+      ["#overview-village", landmarks.village],
+      ["#overview-fishery", landmarks.fishery],
+    ] as const) {
+      const marker = root.querySelector(id) as HTMLElement;
+      const row = (cell / spec.width) | 0;
+      const col = cell % spec.width;
+      place(marker, (col + 0.5) * spec.cellSize - halfWidth, (row + 0.5) * spec.cellSize - halfHeight);
+      marker.hidden = false;
+    }
+  }
+
   const nodeLayer = root.querySelector("#overview-nodes") as HTMLElement;
+  const lastPlayer = { x: Number.NaN, z: Number.NaN, yaw: Number.NaN };
   const nodeMarkers = new Map<number, HTMLElement>();
 
   const api: OverviewMap = {
@@ -303,6 +337,11 @@ export function createOverviewMap(
     },
 
     setPlayer(x, z, yaw) {
+      // Every frame while the map is open; standing still should cost nothing.
+      if (x === lastPlayer.x && z === lastPlayer.z && yaw === lastPlayer.yaw) return;
+      lastPlayer.x = x;
+      lastPlayer.z = z;
+      lastPlayer.yaw = yaw;
       place(playerMarker, x, z);
       // Screen bearing clockwise from "up": derived from the controller's own
       // convention (yaw 0 faces +z, which is *down* the map since row 0 sits

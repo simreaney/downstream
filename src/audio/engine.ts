@@ -7,10 +7,14 @@
  * buffers are more than enough for the register this game wants — soft, short,
  * unobtrusive.
  *
- * Browsers refuse to start an AudioContext until the user has interacted, so the
- * context is created lazily on the first sound after a gesture. Nothing here
- * throws if audio is unavailable; a silent game is a working game.
+ * Browsers refuse to start an AudioContext until the user has interacted. A
+ * context created earlier starts suspended and stays silent until something
+ * resumes it, so it is created — and resumed — on the first key press or click
+ * instead, and rain asked for before then waits rather than creating one.
+ * Nothing here throws if audio is unavailable; a silent game is a working game.
  */
+
+import { clamp01 } from "../core/clamp";
 
 export type SoundName = "plant" | "dig" | "build" | "gather" | "refuse" | "rain";
 
@@ -26,6 +30,8 @@ export function createAudio(): Audio {
   let context: AudioContext | null = null;
   let master: GainNode | null = null;
   let rainGain: GainNode | null = null;
+  /** Level the rain is ramping towards, so the ramp is only rescheduled on a change. */
+  let rainLevel = 0;
   let muted = false;
 
   const ensure = (): AudioContext | null => {
@@ -40,6 +46,16 @@ export function createAudio(): Audio {
     }
     return context;
   };
+
+  // The first gesture is the earliest moment a context is allowed to run.
+  const unlock = (): void => {
+    window.removeEventListener("pointerdown", unlock);
+    window.removeEventListener("keydown", unlock);
+    const ctx = ensure();
+    if (ctx?.state === "suspended") void ctx.resume();
+  };
+  window.addEventListener("pointerdown", unlock);
+  window.addEventListener("keydown", unlock);
 
   /** A short pitched blip with a percussive envelope. */
   const blip = (
@@ -128,8 +144,15 @@ export function createAudio(): Audio {
     },
 
     setRain(intensity) {
+      const level = clamp01(intensity) * 0.22;
+      // Called every frame; nothing to do unless the level actually moves.
+      if (Math.abs(level - rainLevel) < 0.002) return;
+      // Silence needs no context, and creating one before a gesture would only
+      // make a suspended one.
+      if (!context && level === 0) return;
       const ctx = ensure();
       if (!ctx || !master) return;
+      rainLevel = level;
 
       if (!rainGain) {
         rainGain = ctx.createGain();
@@ -156,10 +179,7 @@ export function createAudio(): Audio {
       }
 
       // Ramped rather than set, or a change mid-storm clicks.
-      rainGain.gain.linearRampToValueAtTime(
-        Math.min(0.22, Math.max(0, intensity) * 0.22),
-        ctx.currentTime + 0.3,
-      );
+      rainGain.gain.linearRampToValueAtTime(level, ctx.currentTime + 0.3);
     },
 
     setMuted(next) {

@@ -9,6 +9,7 @@
 
 import { describe, expect, it } from "vitest";
 import {
+  MIN_SAVE_VERSION,
   SAVE_VERSION,
   deserialise,
   serialise,
@@ -34,6 +35,31 @@ function save(overrides: Partial<SaveData> = {}): SaveData {
     ...overrides,
   };
 }
+
+/** Encode an arbitrary wire object the way `serialise` does, to build bad codes. */
+async function codeFor(wire: unknown): Promise<string> {
+  const stream = new Blob([new TextEncoder().encode(JSON.stringify(wire))])
+    .stream()
+    .pipeThrough(new CompressionStream("deflate-raw"));
+  const bytes = new Uint8Array(await new Response(stream).arrayBuffer());
+  let binary = "";
+  for (const byte of bytes) binary += String.fromCharCode(byte);
+  return btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+}
+
+/** A valid wire save, to break one field at a time. */
+const wire = (overrides: Record<string, unknown> = {}) => ({
+  v: SAVE_VERSION,
+  s: 7,
+  z: "medium",
+  t: 0,
+  w: 5,
+  n: 5,
+  p: 0,
+  c: [],
+  i: [2, 100, 0],
+  ...overrides,
+});
 
 describe("save round trip", () => {
   it("restores every field exactly", async () => {
@@ -102,6 +128,31 @@ describe("save round trip", () => {
 
   it("rejects rubbish", async () => {
     await expect(deserialise("not-a-code")).rejects.toThrow();
+  });
+
+  it("rejects a code with no intervention list rather than throwing mid-replay", async () => {
+    await expect(deserialise(await codeFor(wire({ i: undefined })))).rejects.toThrow(/catchment code/);
+  });
+
+  it("rejects a feature outside its landscape", async () => {
+    // A medium grid has 65,536 cells; replay skips placement checks, so this
+    // is the only thing standing between a bad code and a feature on no ground.
+    await expect(deserialise(await codeFor(wire({ i: [2, 65536, 0] })))).rejects.toThrow(/outside/);
+    await expect(deserialise(await codeFor(wire({ i: [2, -1, 0] })))).rejects.toThrow(/outside/);
+    await expect(deserialise(await codeFor(wire({ i: [2, 1.5, 0] })))).rejects.toThrow(/outside/);
+  });
+
+  it("clamps stock to sane counts", async () => {
+    const restored = await deserialise(await codeFor(wire({ w: 1e9, n: -4 })));
+    expect(restored.wood).toBeLessThanOrEqual(999);
+    expect(restored.stone).toBe(0);
+  });
+
+  it("rejects a code from before the current landscape generator", async () => {
+    if (MIN_SAVE_VERSION <= 1) return;
+    await expect(deserialise(await codeFor(wire({ v: MIN_SAVE_VERSION - 1 })))).rejects.toThrow(
+      /older landscape generator/,
+    );
   });
 
   it("round-trips a non-default landscape size", async () => {

@@ -18,7 +18,6 @@ import { traceStreams } from "../scimap/streams";
 import { computeMetrics } from "../scimap/metrics";
 import { chooseSites, fisheryPool } from "../terrain/sites";
 import { POND_RADIUS_CELLS } from "../game/interventions";
-import { accumulateD8 } from "../scimap/d8";
 import { fitGumbel, returnPeriodForDepth } from "../sim/gumbel";
 import { DAM_ROUGHNESS, runStorm, type StormResult } from "../sim/storm";
 import { POND_STORAGE_M3 } from "../game/interventions";
@@ -34,6 +33,14 @@ import type {
 } from "./protocol";
 
 let world: World | null = null;
+/**
+ * Land cover as generated, before any player edit.
+ *
+ * The worker's `landCover` array is mutated by every recompute, so without
+ * this there is nothing to rebuild from: an undone tree would leave its cell
+ * woodland for the rest of the session, still earning credit.
+ */
+let pristineCover: Uint8Array | null = null;
 let currentLayer: LayerKey = "sourceRisk";
 /** Pool of overlay buffers returned by the main thread after upload. */
 const overlayPool: ArrayBuffer[] = [];
@@ -139,6 +146,8 @@ export interface GenerateResult {
   world: World;
   overlay: ArrayBuffer;
   reaches: ReachDto[];
+  /** In-channel risk at every reach vertex, as a recompute would return it. */
+  reachRisk: Float32Array<ArrayBuffer>;
   metrics: CatchmentMetricsDto;
   sites: SitesDto;
   baseline: CatchmentMetricsDto;
@@ -152,10 +161,12 @@ export function handleGenerate(
 ): GenerateResult {
   currentLayer = layer;
   world = createWorld(seed, { spec }, onProgress);
+  pristineCover = Uint8Array.from(world.arrays.landCover);
+  overlayPool.length = 0;
 
   onProgress?.(76, "3.1 Tracing the river network…");
   const { arrays } = world;
-  const d8 = accumulateD8(arrays.downstream, arrays.table.order);
+  const d8 = arrays.d8Accum;
   reaches = traceStreams(arrays.channelMask, arrays.downstream, d8).map((line) => ({
     cells: line.cells,
     accum: line.accum,
@@ -182,12 +193,20 @@ export function handleGenerate(
   // reason the stretch bounds are: every score is a reduction against how the
   // catchment was *found*, so recomputing this later would silently reset the
   // player's progress to zero.
+  //
+  // Frozen from the same solve a recompute runs, with no features. The full
+  // pipeline in `createWorld` does not apply the buffer breaks that existing
+  // riparian woodland earns, and every recompute does — so a baseline taken
+  // straight from it handed the player's first placement the credit for all
+  // the woodland that was already there.
+  solve([], []);
   baseline = metrics();
 
   return {
     world,
     overlay: buildOverlay(),
     reaches,
+    reachRisk: buildReachRisk(reaches),
     metrics: baseline,
     sites,
     baseline,
@@ -215,14 +234,32 @@ export function handleRecompute(
   breaks: readonly BreakDto[],
   coverEdits: readonly CoverEditDto[],
 ): RecomputeResult {
-  const current = requireWorld();
+  requireWorld();
   currentLayer = layer;
+  solve(breaks, coverEdits);
 
-  const { arrays, bounds } = current;
-  if (coverEdits.length > 0) {
-    for (const edit of coverEdits) arrays.landCover[edit.cell] = edit.cover;
-    buildRiskWeight(arrays.landCover, arrays.riskWeight);
-  }
+  return {
+    overlay: buildOverlay(),
+    reachRisk: buildReachRisk(reaches),
+    metrics: metrics(),
+  };
+}
+
+/**
+ * Re-solve the catchment for a complete set of features, from the land cover
+ * as generated.
+ *
+ * Restoring the pristine cover first is what makes the "complete set, not
+ * deltas" contract true for cover edits as well as breaks: a feature missing
+ * from the set leaves no trace, however many recomputes ago it was placed.
+ */
+function solve(breaks: readonly BreakDto[], coverEdits: readonly CoverEditDto[]): void {
+  const { arrays, bounds } = requireWorld();
+  if (!pristineCover) throw new Error("No catchment has been generated yet");
+
+  arrays.landCover.set(pristineCover);
+  for (const edit of coverEdits) arrays.landCover[edit.cell] = edit.cover;
+  buildRiskWeight(arrays.landCover, arrays.riskWeight);
 
   // Buffer breaks are derived rather than sent. Whether a planted cell forms a
   // buffer depends on how many woodland cells lie between it and the channel,
@@ -249,12 +286,6 @@ export function handleRecompute(
   }
 
   recomputeFromTwi(arrays, bounds, resolved);
-
-  return {
-    overlay: buildOverlay(),
-    reachRisk: buildReachRisk(reaches),
-    metrics: metrics(),
-  };
 }
 
 /** Snapshots the whole grid this many times across a storm, for playback. */
@@ -309,8 +340,10 @@ export function handleStorm(
       slopeDeg: arrays.slopeDeg,
       channelMask: arrays.channelMask,
       landCover: arrays.landCover,
+      // "Without your work" means without the planting too, not only without
+      // the ponds' storage and the dams' roughness.
+      counterfactualLandCover: pristineCover ?? arrays.landCover,
       rainfallScaled: arrays.rainfallScaled,
-      sourceRisk: arrays.sourceRisk,
       outlet: arrays.outlet,
       gaugeCell: arrays.outlet,
       features: { pondStorageM3, damRoughness },
@@ -336,6 +369,7 @@ export function handleRelease(buffers: ArrayBuffer[]): void {
 /** Test seam: drop all worker state. */
 export function resetWorkerState(): void {
   world = null;
+  pristineCover = null;
   sites = null;
   baseline = null;
   reaches = [];

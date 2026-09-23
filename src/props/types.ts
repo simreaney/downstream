@@ -20,6 +20,8 @@
 import * as THREE from "three";
 import type { CurvatureUniforms } from "../render/curvature";
 import { applyCurvature } from "../render/curvature";
+import { applyOcclusionFade, type OcclusionFade } from "../render/occlusionFade";
+import { applySoftFinish, bakeSoftAo } from "../render/softFinish";
 
 export interface PropPart {
   readonly geometry: THREE.BufferGeometry;
@@ -40,7 +42,15 @@ export interface PropAsset {
 export interface PropContext {
   readonly curvature: CurvatureUniforms;
   readonly gradientMap: THREE.Texture;
-  /** Toon material for a flat colour, shared between props that use it. */
+  /** Sight line along which props dither away so the player stays visible. */
+  readonly fade: OcclusionFade;
+  /**
+   * Toon material for a flat colour, shared between props that use it.
+   *
+   * Reads vertex colours, which carry the occlusion `part()` bakes — so any
+   * geometry drawn with one of these must go through `part()` or
+   * `bakeSoftAo`, or it renders black.
+   */
   material(colour: number): THREE.Material;
 }
 
@@ -56,12 +66,14 @@ export type PropFactory = (context: PropContext) => PropAsset;
 export function createPropContext(
   curvature: CurvatureUniforms,
   gradientMap: THREE.Texture,
+  fade: OcclusionFade,
 ): PropContext {
   const cache = new Map<number, THREE.Material>();
 
   return {
     curvature,
     gradientMap,
+    fade,
     material(colour) {
       const existing = cache.get(colour);
       if (existing) return existing;
@@ -69,7 +81,10 @@ export function createPropContext(
       const material = new THREE.MeshToonMaterial({
         color: colour,
         gradientMap,
+        vertexColors: true,
       });
+      applySoftFinish(material, "prop");
+      applyOcclusionFade(material, fade);
       // Props are bent by the same rule as the ground they stand on, or they
       // would float above it at distance. A distinct variant name keeps their
       // compiled program separate from the terrain's, which also injects the
@@ -81,13 +96,19 @@ export function createPropContext(
   };
 }
 
+/**
+ * A geometry-material pair, with soft occlusion baked into the geometry.
+ *
+ * Assumes the geometry's origin is where the prop meets the ground, which is
+ * true of every factory in this directory.
+ */
 export function part(
   geometry: THREE.BufferGeometry,
   material: THREE.Material,
   options: { castShadow?: boolean; receiveShadow?: boolean } = {},
 ): PropPart {
   return {
-    geometry,
+    geometry: bakeSoftAo(geometry),
     material,
     castShadow: options.castShadow ?? true,
     receiveShadow: options.receiveShadow ?? true,

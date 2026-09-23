@@ -20,7 +20,7 @@ const SPEC: GridSpec = { width: 64, height: 64, cellSize: 4 };
 const FLAT = new Float32Array(SPEC.width * SPEC.height).fill(10);
 
 function input(moveX: number, moveZ: number): InputState {
-  return { moveX, moveZ, lookX: 0, lookY: 0, sprint: false };
+  return { moveX, moveZ, lookX: 0, lookY: 0, sprint: false, zoom: 0 };
 }
 
 /** Walk for two seconds of frames, with the camera facing down +z. */

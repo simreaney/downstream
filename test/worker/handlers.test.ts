@@ -126,6 +126,30 @@ describe("worker handlers", () => {
     expect(plantingDelta(LandCover.Woodland)).toBe(0);
   });
 
+  it("freezes a baseline that a recompute with no interventions reproduces", () => {
+    // Every score is a reduction against this baseline, so if an untouched
+    // catchment re-solves to anything else the first placement is credited
+    // with a change the player did not make.
+    const generated = handleGenerate(20260809, "sourceRisk");
+    const untouched = handleRecompute("sourceRisk", [], []);
+    expect(untouched.metrics).toEqual(generated.baseline);
+  }, 60_000);
+
+  it("restores the catchment exactly when every cover edit is undone", () => {
+    // Undo sends the complete remaining set of features — here, none — and the
+    // worker must rebuild from the land cover as generated, not from whatever
+    // the last set of edits left behind.
+    const generated = handleGenerate(20260809, "sourceRisk");
+    const edits = [];
+    for (let cell = 0; cell < CELL_COUNT && edits.length < 400; cell++) {
+      if (landCoverOf(cell) === LandCover.Arable) edits.push({ cell, cover: LandCover.Woodland });
+    }
+    handleRecompute("sourceRisk", [], edits);
+
+    const undone = handleRecompute("sourceRisk", [], []);
+    expect(undone.metrics).toEqual(generated.baseline);
+  }, 60_000);
+
   it("reuses released buffers rather than allocating per placement", () => {
     const generated = handleGenerate(20260809, "sourceRisk");
     handleRelease([generated.overlay]);

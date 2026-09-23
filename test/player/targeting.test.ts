@@ -83,6 +83,23 @@ describe("heightfield sampling", () => {
     expect(sampleHeight(dem, SPEC, position.x + 2, position.z)).toBeCloseTo(8 * 4 + 2, 4);
   });
 
+  it("follows the mesh's own triangles, not a bilinear patch", () => {
+    // One twisted quad: three corners at 0, the far corner (d) at 4. Bilinear
+    // interpolation would put its centre at 1; the drawn surface — triangles
+    // (a, c, b) and (b, c, d), split along the b–c diagonal — puts it at 0.
+    const dem = new Float32Array(SPEC.width * SPEC.height);
+    const d = 9 * SPEC.width + 9;
+    dem[d] = 4;
+    const a = cellToWorld(SPEC, 8 * SPEC.width + 8, new THREE.Vector3());
+    const half = SPEC.cellSize / 2;
+
+    expect(sampleHeight(dem, SPEC, a.x + half, a.z + half)).toBeCloseTo(0, 6);
+    // Three quarters of the way to d is on the (b, c, d) triangle: d minus a
+    // quarter of each of its two edges' rise.
+    const threeQuarters = SPEC.cellSize * 0.75;
+    expect(sampleHeight(dem, SPEC, a.x + threeQuarters, a.z + threeQuarters)).toBeCloseTo(2, 6);
+  });
+
   it("clamps outside the grid rather than reading past the end", () => {
     const dem = ramp();
     const far = SPEC.width * SPEC.cellSize;

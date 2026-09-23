@@ -17,7 +17,7 @@ import { channelThresholdCells, LandCover } from "../scimap/constants";
 import { isPlantable, isWorthPlanting } from "../scimap/landcover";
 import type { MainThreadArrays } from "../worker/client";
 import type { Intervention, InterventionKind } from "./interventions";
-import { POND_RADIUS_CELLS } from "./interventions";
+import { costOf, POND_RADIUS_CELLS } from "./interventions";
 
 export type PlacementReason =
   | "ok"
@@ -91,7 +91,7 @@ export function checkPond(context: PlacementContext, cell: number): PlacementChe
 
   const area = arrays.accum[cell] * cellAreaM2(spec);
   if (!context.hasSpade) return fail("needSpade", area);
-  if (context.stone < 8) return fail("needStone", area);
+  if (context.stone < costOf("pond").stone) return fail("needStone", area);
 
   // An online pond in a watercourse traps channel sediment and blocks fish
   // passage. Offline attenuation ponds are the defensible practice, and refusing
@@ -121,7 +121,7 @@ export function checkLeakyDam(context: PlacementContext, cell: number): Placemen
   if (cell < 0) return fail("offMap");
 
   const area = arrays.accum[cell] * cellAreaM2(spec);
-  if (context.wood < 6) return fail("needWood", area);
+  if (context.wood < costOf("dam").wood) return fail("needWood", area);
   if (!arrays.channelMask[cell]) return fail("notInChannel", area);
 
   // Real guidance puts leaky barriers in low-order headwater reaches. On a
@@ -155,7 +155,7 @@ export function checkTree(context: PlacementContext, cell: number): PlacementChe
   if (cell < 0) return fail("offMap");
 
   const area = arrays.accum[cell] * cellAreaM2(spec);
-  if (context.wood < 1) return fail("needWood", area);
+  if (context.wood < costOf("tree").wood) return fail("needWood", area);
 
   const cover = arrays.landCover[cell] as LandCover;
   if (cover === LandCover.Woodland) return fail("alreadyWooded", area);
@@ -192,6 +192,11 @@ export function checkPlacement(
  */
 export function plantingHelps(arrays: MainThreadArrays, cell: number): boolean {
   return cell >= 0 && isWorthPlanting(arrays.landCover[cell] as LandCover);
+}
+
+/** The cells a feature of this kind occupies: a pond's disc, otherwise its own cell. */
+export function footprintOf(spec: GridSpec, kind: InterventionKind, cell: number): number[] {
+  return kind === "pond" ? discFootprint(spec, cell, POND_RADIUS_CELLS) : [cell];
 }
 
 /** Cells within `radius` of `centre`, as a filled disc. */

@@ -23,7 +23,7 @@ export interface Renderer {
 
 /**
  * Device pixel ratio is capped at 2. Beyond that the fill cost roughly doubles
- * again for a difference nobody can see on the toon-shaded, flat-coloured art,
+ * again for a difference nobody can see on the soft, smoothly shaded art,
  * and phones with ratio 3 are exactly the devices that can least afford it.
  */
 const MAX_PIXEL_RATIO = 2;
@@ -38,26 +38,38 @@ export function createRenderer(canvas: HTMLCanvasElement): Renderer {
   gl.outputColorSpace = THREE.SRGBColorSpace;
   // No tone mapping. ACES is a filmic curve built to make photographic highlights
   // roll off gracefully, and it does that by desaturating as values rise — which
-  // is the opposite of what flat, saturated toon colour needs. It turned the
+  // is the opposite of what an authored pastel palette needs: it turned the
   // river's blue to grey and washed the fields pale. With the curve removed,
   // colours arrive as authored, and the lights below are set so that lit
   // surfaces land just under 1.0 rather than clipping.
   gl.toneMapping = THREE.NoToneMapping;
   gl.shadowMap.enabled = true;
-  gl.shadowMap.type = THREE.PCFSoftShadowMap;
+  // PCF with a wide filter radius (set on the light) rather than the old soft
+  // variant, which three now maps onto this anyway: the radius is what gives the
+  // faint, feathered overcast-day shadows the art direction asks for.
+  gl.shadowMap.type = THREE.PCFShadowMap;
 
   const scene = new THREE.Scene();
-  scene.background = new THREE.Color(0x8fd3e8);
+  scene.background = new THREE.Color(0xf5ecdc);
 
-  const camera = new THREE.PerspectiveCamera(50, 1, 0.5, 4000);
+  // A narrow field of view from further back, for the flattened, miniature
+  // perspective of a diorama photographed from across the table. See
+  // `camera.ts` for the framing that goes with it.
+  const camera = new THREE.PerspectiveCamera(34, 1, 0.5, 4000);
   camera.position.set(0, 40, 60);
   camera.lookAt(0, 0, 0);
 
   const callbacks = new Set<FrameCallback>();
-  const clock = new THREE.Clock();
+  // Timer rather than the deprecated Clock. Connected to the document so a tab
+  // that was hidden resumes with a fresh delta instead of the whole absence.
+  const timer = new THREE.Timer();
+  timer.connect(document);
   let running = false;
 
   const resize = (): void => {
+    // Re-read on every resize: dragging the window to a display with a
+    // different pixel ratio fires one, and the buffer should follow.
+    gl.setPixelRatio(Math.min(window.devicePixelRatio, MAX_PIXEL_RATIO));
     const width = canvas.clientWidth || window.innerWidth;
     const height = canvas.clientHeight || window.innerHeight;
     gl.setSize(width, height, false);
@@ -65,11 +77,12 @@ export function createRenderer(canvas: HTMLCanvasElement): Renderer {
     camera.updateProjectionMatrix();
   };
 
-  const tick = (): void => {
-    // Clamp dt so a backgrounded tab does not resume with a huge step that
-    // teleports the player through terrain or destabilises the storm routing.
-    const dt = Math.min(clock.getDelta(), 0.1);
-    const elapsed = clock.elapsedTime;
+  const tick = (timestamp: number): void => {
+    timer.update(timestamp);
+    // Clamp dt so a stalled frame cannot take a huge step that teleports the
+    // player through terrain or destabilises the storm routing.
+    const dt = Math.min(timer.getDelta(), 0.1);
+    const elapsed = timer.getElapsed();
     for (const callback of callbacks) callback(dt, elapsed);
     gl.render(scene, camera);
   };
@@ -88,7 +101,7 @@ export function createRenderer(canvas: HTMLCanvasElement): Renderer {
     start() {
       if (running) return;
       running = true;
-      clock.start();
+      timer.reset();
       gl.setAnimationLoop(tick);
     },
     stop() {
@@ -99,6 +112,7 @@ export function createRenderer(canvas: HTMLCanvasElement): Renderer {
       this.stop();
       window.removeEventListener("resize", resize);
       callbacks.clear();
+      timer.dispose();
       gl.dispose();
     },
   };

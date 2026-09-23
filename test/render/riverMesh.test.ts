@@ -15,17 +15,25 @@
  * mesh (which would be obvious); three flips the normal per fragment and shades
  * the water with the hemisphere light's ground colour, so a correct river
  * renders in murky grey and reads as a colour bug.
+ *
+ * And the water has to stay on top of the ground it is drawn over. A ribbon
+ * that dips into its own banks looks like a rendering bug, and it is the
+ * complaint that prompted the carved bed.
  */
 
 import { describe, expect, it } from "vitest";
 import * as THREE from "three";
 import type { GridSpec } from "../../src/core/grid";
 import {
+  carveRiverBed,
   createRiverMesh,
   HALF_WIDTH_MAX,
   HALF_WIDTH_MIN,
+  layoutRiver,
   SAMPLES_PER_CELL,
+  VERTICES_PER_SECTION,
 } from "../../src/render/riverMesh";
+import { sampleHeight } from "../../src/render/terrainMesh";
 import type { ReachDto } from "../../src/worker/protocol";
 
 const SPEC: GridSpec = { width: 16, height: 16, cellSize: 4 };
@@ -54,11 +62,16 @@ function sectionsIn(cells: number): number {
   return (cells - 1) * SAMPLES_PER_CELL + 1;
 }
 
+/** First vertex of a cross-section, and its right- and left-bank vertices. */
+const firstOf = (section: number): number => section * VERTICES_PER_SECTION;
+const rightOf = (section: number): number => firstOf(section);
+const leftOf = (section: number): number => firstOf(section) + VERTICES_PER_SECTION - 1;
+
 describe("createRiverMesh", () => {
-  it("subdivides each reach, emitting two vertices per cross-section", () => {
+  it("subdivides each reach into cross-sections of equal vertex count", () => {
     const river = build([reach(1, 5), reach(8, 4)]);
     const position = river.mesh.geometry.getAttribute("position");
-    expect(position.count).toBe((sectionsIn(5) + sectionsIn(4)) * 2);
+    expect(position.count).toBe((sectionsIn(5) + sectionsIn(4)) * VERTICES_PER_SECTION);
   });
 
   it("lands a cross-section exactly on each cell, in reach order", () => {
@@ -70,8 +83,8 @@ describe("createRiverMesh", () => {
     const actual = river.mesh.geometry.getAttribute("aReachRisk").array as Float32Array;
 
     // Cell `i` of the first reach owns cross-section `i * SAMPLES_PER_CELL`; the
-    // second reach starts after the first reach's sections. Both vertices of a
-    // section carry the value, so a section is two entries wide.
+    // second reach starts after the first reach's sections. Every vertex of a
+    // section carries the value.
     const sectionOf = (reachStart: number, cell: number): number =>
       reachStart + cell * SAMPLES_PER_CELL;
     const secondReach = sectionsIn(3);
@@ -86,8 +99,9 @@ describe("createRiverMesh", () => {
 
     // Compared with a tolerance because the attribute is Float32.
     for (const [section, value] of expected) {
-      expect(actual[section * 2]).toBeCloseTo(value, 6);
-      expect(actual[section * 2 + 1]).toBeCloseTo(value, 6);
+      for (let k = 0; k < VERTICES_PER_SECTION; k++) {
+        expect(actual[firstOf(section) + k]).toBeCloseTo(value, 6);
+      }
     }
   });
 
@@ -100,9 +114,9 @@ describe("createRiverMesh", () => {
     // Halfway between the first two cells is halfway between their risks, and
     // every section along that span is strictly increasing.
     const half = SAMPLES_PER_CELL / 2;
-    expect(actual[half * 2]).toBeCloseTo(0.5, 6);
+    expect(actual[firstOf(half)]).toBeCloseTo(0.5, 6);
     for (let section = 1; section <= SAMPLES_PER_CELL; section++) {
-      expect(actual[section * 2]).toBeGreaterThan(actual[(section - 1) * 2]);
+      expect(actual[firstOf(section)]).toBeGreaterThan(actual[firstOf(section - 1)]);
     }
   });
 
@@ -117,7 +131,7 @@ describe("createRiverMesh", () => {
 
     const actual = river.mesh.geometry.getAttribute("aReachRisk").array as Float32Array;
     expect(actual[0]).toBeCloseTo(0.8, 6);
-    expect(actual[(sectionsIn(2) - 1) * 2]).toBeCloseTo(0.9, 6);
+    expect(actual[firstOf(sectionsIn(2) - 1)]).toBeCloseTo(0.9, 6);
   });
 
   it("winds triangles so the surface faces up", () => {
@@ -152,8 +166,10 @@ describe("createRiverMesh", () => {
     const position = river.mesh.geometry.getAttribute("position") as THREE.BufferAttribute;
 
     const halfWidthAt = (section: number): number => {
-      const left = new THREE.Vector3().fromBufferAttribute(position, section * 2);
-      const right = new THREE.Vector3().fromBufferAttribute(position, section * 2 + 1);
+      // Measured in plan: on sloping banks the edge vertices sit at different
+      // heights, which is not the ribbon being wider.
+      const left = new THREE.Vector3().fromBufferAttribute(position, leftOf(section)).setY(0);
+      const right = new THREE.Vector3().fromBufferAttribute(position, rightOf(section)).setY(0);
       return left.distanceTo(right) / 2;
     };
 
@@ -172,5 +188,68 @@ describe("createRiverMesh", () => {
     // Defensive: a mismatched length must not write past the attribute.
     const river = build([reach(1, 4)]);
     expect(() => river.setReachRisk(new Float32Array(2))).not.toThrow();
+  });
+});
+
+describe("water on its bed", () => {
+  /**
+   * A V-shaped valley draining +z down column 8: banks rising 0.4 m per metre
+   * either side, and the floor falling 0.05 m per metre downstream. Steep
+   * enough that a flat ribbon level with its centreline would bury both edges.
+   */
+  function valley(): Float32Array {
+    const dem = new Float32Array(SPEC.width * SPEC.height);
+    for (let row = 0; row < SPEC.height; row++) {
+      for (let col = 0; col < SPEC.width; col++) {
+        dem[row * SPEC.width + col] =
+          20 - row * SPEC.cellSize * 0.05 + Math.abs(col - 8) * SPEC.cellSize * 0.4;
+      }
+    }
+    return dem;
+  }
+
+  it("never puts a ribbon vertex below the ground it is drawn over", () => {
+    const dem = valley();
+    const reaches = [reach(1, 12)];
+    const layout = layoutRiver(reaches, dem, SPEC, SPEC.width * SPEC.height);
+    const ground = Float32Array.from(dem);
+    carveRiverBed(ground, SPEC, layout);
+
+    const river = createRiverMesh(reaches, dem, SPEC, SPEC.width * SPEC.height, new THREE.MeshBasicMaterial(), {
+      layout,
+      ground,
+    });
+    const position = river.mesh.geometry.getAttribute("position") as THREE.BufferAttribute;
+    for (let i = 0; i < position.count; i++) {
+      const x = position.getX(i);
+      const z = position.getZ(i);
+      expect(position.getY(i)).toBeGreaterThan(sampleHeight(ground, SPEC, x, z));
+    }
+  });
+
+  it("carves the ground under the centreline below the water surface", () => {
+    const dem = valley();
+    const layout = layoutRiver([reach(1, 12)], dem, SPEC, SPEC.width * SPEC.height);
+    const ground = Float32Array.from(dem);
+    const footprint = carveRiverBed(ground, SPEC, layout);
+
+    const [line] = layout;
+    for (let j = 0; j < line.sections; j++) {
+      expect(sampleHeight(ground, SPEC, line.x[j], line.z[j])).toBeLessThan(line.level[j]);
+    }
+    // Only ever lowers, and marks the channel itself as occupied by water.
+    for (let i = 0; i < dem.length; i++) expect(ground[i]).toBeLessThanOrEqual(dem[i]);
+    expect(footprint[5 * SPEC.width + 8]).toBe(1);
+    expect(footprint[5 * SPEC.width + 1]).toBe(0);
+  });
+
+  it("never lets the water surface rise downstream", () => {
+    // A pit halfway down: the level must hold through it, not climb back out.
+    const dem = valley();
+    dem[6 * SPEC.width + 8] -= 3;
+    const [line] = layoutRiver([reach(1, 12)], dem, SPEC, SPEC.width * SPEC.height);
+    for (let j = 1; j < line.sections; j++) {
+      expect(line.level[j]).toBeLessThanOrEqual(line.level[j - 1] + 1e-9);
+    }
   });
 });

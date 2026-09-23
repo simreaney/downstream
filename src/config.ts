@@ -26,8 +26,6 @@ export const GRID: GridSpec = {
 };
 
 export const CELL_COUNT = GRID.width * GRID.height;
-export const CELL_AREA_M2 = GRID.cellSize * GRID.cellSize;
-export const WORLD_SIZE_M = GRID.width * GRID.cellSize;
 
 export type LandscapeSizeId = "small" | "medium" | "large";
 
@@ -88,8 +86,6 @@ export function reliefFor(spec: GridSpec): number {
   return spec.width * spec.cellSize * RELIEF_RATIO;
 }
 
-/** Relief of the shipped grid, in metres. */
-export const RELIEF_M = reliefFor(GRID);
 
 /**
  * Elevation added to break ties when priority-flood resolves a depression.

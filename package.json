@@ -12,7 +12,8 @@
     "test": "vitest run test/",
     "test:watch": "vitest test/",
     "typecheck": "tsc --noEmit",
-    "lint:hotpath": "node scripts/lint-hotpath.mjs"
+    "lint:hotpath": "node scripts/lint-hotpath.mjs",
+    "check": "npm run typecheck && npm run lint:hotpath && npm test && npm run build"
   },
   "dependencies": {
     "three": "0.185.1"

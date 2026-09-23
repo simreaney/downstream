@@ -91,8 +91,12 @@ export interface StormInput {
   readonly slopeDeg: Float64Array;
   readonly channelMask: Uint8Array;
   readonly landCover: Uint8Array;
+  /**
+   * Land cover for the counterfactual run: the catchment as generated, before
+   * any planting or pond. Defaults to `landCover`.
+   */
+  readonly counterfactualLandCover?: Uint8Array;
   readonly rainfallScaled: Float64Array;
-  readonly sourceRisk: Float64Array;
   readonly outlet: number;
   /** Cell the village gauge sits on; usually at or near the outlet. */
   readonly gaugeCell: number;
@@ -109,12 +113,9 @@ export interface StormOptions {
 export interface Hydrograph {
   /** Discharge at the gauge, cubic metres per second, one per step. */
   readonly q: Float32Array;
-  /** Sediment concentration proxy at the gauge, one per step. */
-  readonly turbidity: Float32Array;
   readonly peakQ: number;
   /** Time of peak, in seconds from the start of rainfall. */
   readonly tPeakSeconds: number;
-  readonly volumeM3: number;
 }
 
 export interface StormResult {
@@ -149,8 +150,6 @@ interface Stores {
   readonly soil: Float64Array;
   readonly pondFree: Float64Array;
   readonly outflow: Float64Array;
-  readonly sediment: Float64Array;
-  readonly sedimentOut: Float64Array;
 }
 
 function createStores(n: number): Stores {
@@ -159,16 +158,15 @@ function createStores(n: number): Stores {
     soil: new Float64Array(n),
     pondFree: new Float64Array(n),
     outflow: new Float64Array(n),
-    sediment: new Float64Array(n),
-    sedimentOut: new Float64Array(n),
   };
 }
 
 /**
  * Run one storm over the catchment.
  *
- * `useFeatures` false disables ponds and dam roughness, producing the
- * counterfactual against which the player's work is measured.
+ * `useFeatures` false disables ponds and dam roughness and swaps in the
+ * pre-intervention land cover, producing the counterfactual against which the
+ * player's work is measured.
  */
 function simulate(
   input: StormInput,
@@ -177,7 +175,8 @@ function simulate(
   depthFrames: Uint8Array | null,
   frameStride: number,
 ): Hydrograph {
-  const { spec, table, slopeDeg, channelMask, landCover, rainfallScaled, features } = input;
+  const { spec, table, slopeDeg, channelMask, rainfallScaled, features } = input;
+  const landCover = useFeatures ? input.landCover : (input.counterfactualLandCover ?? input.landCover);
   const { width, height } = spec;
   const n = width * height;
   const area = cellAreaM2(spec);
@@ -214,11 +213,9 @@ function simulate(
   const depthPerUnit = profileSum > 0 ? options.depthMm / 1000 / profileSum : 0;
 
   const q = new Float32Array(steps);
-  const turbidity = new Float32Array(steps);
-  const { surface, soil, pondFree, outflow, sediment, sedimentOut } = stores;
+  const { surface, soil, pondFree, outflow } = stores;
 
   let frameIndex = 0;
-  let volumeM3 = 0;
 
   for (let step = 0; step < steps; step++) {
     // --- rainfall and infiltration ------------------------------------------
@@ -238,10 +235,6 @@ function simulate(
         const infiltrated = Math.min(fell, room);
         soil[cell] += infiltrated;
         surface[cell] += (fell - infiltrated) * area;
-
-        // Sediment enters with the runoff, in proportion to the cell's source
-        // risk — the model's own answer to "how dirty is water from here".
-        sediment[cell] += (fell - infiltrated) * area * input.sourceRisk[cell];
       }
     }
 
@@ -252,23 +245,16 @@ function simulate(
       let leaving = surface[cell] * release[cell];
 
       if (useFeatures && pondFree[cell] > 0 && leaving > 0) {
-        // A pond absorbs until full, then passes flow. Sediment settles with the
-        // water it came in with, which is why a full pond stops helping.
+        // A pond absorbs until full, then passes flow — which is why a full
+        // pond stops helping.
         const absorbed = Math.min(leaving, pondFree[cell]);
         pondFree[cell] -= absorbed;
         leaving -= absorbed;
         surface[cell] -= absorbed;
-        const settled = sediment[cell] * (absorbed / Math.max(1e-9, surface[cell] + absorbed));
-        sediment[cell] -= settled;
       }
 
-      const carried =
-        surface[cell] > 1e-9 ? sediment[cell] * (leaving / surface[cell]) : 0;
-
       outflow[cell] = leaving;
-      sedimentOut[cell] = carried;
       surface[cell] -= leaving;
-      sediment[cell] -= carried;
     }
 
     // --- route downslope ----------------------------------------------------
@@ -280,7 +266,6 @@ function simulate(
       const row = (cell / width) | 0;
       const col = cell % width;
       const offset = cell * 8;
-      let routed = 0;
 
       for (let k = 0; k < 8; k++) {
         const fraction = table.fractions[offset + k];
@@ -291,25 +276,13 @@ function simulate(
 
         const neighbour = nRow * width + nCol;
         surface[neighbour] += leaving * fraction;
-        sediment[neighbour] += sedimentOut[cell] * fraction;
-        routed += fraction;
       }
-
-      // Whatever the fractions did not account for has left the catchment. At
-      // the outlet that is the whole load, which is what the gauge measures.
-      if (routed < 1) {
-        const escaped = leaving * (1 - routed);
-        if (cell === input.gaugeCell || cell === input.outlet) volumeM3 += escaped;
-      }
+      // Whatever the fractions did not account for has left the catchment.
     }
 
     // --- gauge --------------------------------------------------------------
     const gaugeFlow = outflow[input.gaugeCell] / STEP_SECONDS;
     q[step] = gaugeFlow;
-    turbidity[step] =
-      outflow[input.gaugeCell] > 1e-9
-        ? sedimentOut[input.gaugeCell] / outflow[input.gaugeCell]
-        : 0;
 
     // --- playback frame -----------------------------------------------------
     if (depthFrames && step % frameStride === 0 && frameIndex < options.frames) {
@@ -331,7 +304,7 @@ function simulate(
     }
   }
 
-  return { q, turbidity, peakQ, tPeakSeconds, volumeM3 };
+  return { q, peakQ, tPeakSeconds };
 }
 
 export function runStorm(input: StormInput, options: StormOptions): StormResult {

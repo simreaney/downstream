@@ -19,7 +19,6 @@ export interface InstancedBatch {
   /** Add an instance, returning a stable handle. */
   add(position: THREE.Vector3, rotationY: number, scale: number, tint?: THREE.Color): number;
   remove(handle: number): void;
-  update(handle: number, position: THREE.Vector3, rotationY: number, scale: number): void;
   readonly count: number;
   readonly capacity: number;
   /**
@@ -41,6 +40,7 @@ export function createInstancedBatch(asset: PropAsset, capacity: number): Instan
     mesh.receiveShadow = part.receiveShadow;
     mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
     mesh.count = 0;
+    mesh.visible = false;
     // The curvature shader displaces instances, so the computed bounds no longer
     // describe what is on screen; three would cull a batch that is visible.
     mesh.frustumCulled = false;
@@ -54,6 +54,19 @@ export function createInstancedBatch(asset: PropAsset, capacity: number): Instan
   const handleOfSlot: number[] = [];
   let nextHandle = 1;
   let count = 0;
+
+  /**
+   * Draw the first `n` instances. An empty InstancedMesh is hidden rather than
+   * left at count 0: three still binds its program and issues an empty draw —
+   * twice, with the shadow pass — for every visible mesh, however few
+   * instances it has.
+   */
+  const setDrawn = (n: number): void => {
+    for (const mesh of meshes) {
+      mesh.count = n;
+      mesh.visible = n > 0;
+    }
+  };
 
   const matrix = new THREE.Matrix4();
   const quaternion = new THREE.Quaternion();
@@ -97,7 +110,7 @@ export function createInstancedBatch(asset: PropAsset, capacity: number): Instan
       handleOfSlot[slot] = handle;
 
       writeSlot(slot, position, rotationY, scale, tint);
-      for (const mesh of meshes) mesh.count = count;
+      setDrawn(count);
       return handle;
     },
 
@@ -129,18 +142,12 @@ export function createInstancedBatch(asset: PropAsset, capacity: number): Instan
 
       slotOfHandle.delete(handle);
       count = lastSlot;
-      for (const mesh of meshes) mesh.count = count;
-    },
-
-    update(handle, position, rotationY, scale) {
-      const slot = slotOfHandle.get(handle);
-      if (slot === undefined) return;
-      writeSlot(slot, position, rotationY, scale);
+      setDrawn(count);
     },
 
     setVisibleCount(visible) {
       const clamped = Math.max(0, Math.min(count, Math.floor(visible)));
-      for (const mesh of meshes) mesh.count = clamped;
+      setDrawn(clamped);
     },
 
     addTo(scene) {
