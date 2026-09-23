@@ -1,0 +1,12 @@
+# Dependencies are installed from package-lock.json (`npm ci`), never committed:
+# they include platform-specific native binaries that only run on the machine
+# that installed them.
+node_modules/
+
+# Build output. GitHub Pages is published by .github/workflows/deploy.yml, which
+# builds in CI, so nothing here needs to be in the repository.
+dist/
+
+# Editor and OS clutter.
+.DS_Store
+*.local
