@@ -52,6 +52,7 @@ sim/      Gumbel storm depths, lag-and-route flood model
 worker/   owns the canonical arrays; the main thread never sees them
 render/   one terrain mesh, instanced props, toon + curved-world shaders
 game/     interventions, validity, scoring, receptors, save
+xr/       the headset: tabletop rig, controllers, canvas HUD, plinth
 ```
 
 **One worker.** Terrain generation, SCIMAP and storm routing never run
@@ -493,3 +494,67 @@ houses dropped on a field:
 
 The fishery hut moved off its channel cell (it used to stand in the river) onto
 the bank beside it, with the jetty over the water.
+
+---
+
+## 10. VR: the diorama becomes a real one
+
+The art direction already describes a toy diorama seen from across a table, so
+in a headset the catchment *is* one, rather than the player becoming a
+1:1-scale person walking through it. That kept the game third-person, and it is
+also what makes VR comfortable here. The player's head is tracked one to one and
+the game never moves it. What moves is the world: it is scaled, snap-turned and
+slid under a level horizon so the character stays on the table. That is how
+Moss and Astro Bot keep third-person VR comfortable.
+
+| Piece | Where | Why |
+|---|---|---|
+| One scaled camera rig | `xr/diorama.ts` | three applies the camera's parent matrix to both eyes, IPD included, so a uniform scale on it shrinks the world with nothing in the scene changed |
+| Table height from the eyes at session start | `xr/diorama.ts` | Works seated or standing, with no calibration step |
+| Zoom ends on the whole board | `xr/diorama.ts` | Past a third of the zoom range the focus drifts from the character to the catchment's middle, so the board ends up in front of the player rather than through them |
+| Curvature off, fog rescaled | `xr/mode.ts` | View space is real metres under the rig. The k·d² bend would be a sub-millimetre wobble, and fog density is per view-space metre |
+| Canvas HUD, mirrored | `xr/hud.ts`, `ui/hud.ts` | The DOM never reaches an immersive session. `mirrorHud` keeps the headset's panels current with the page's, so either can be on show |
+| Controls mirror the gamepad | `xr/controls.ts` | A builds, B gathers, X cycles the map, grips cycle tools. The right stick turns and zooms instead of orbiting, because the head does the looking |
+| Plinth | `xr/plinth.ts` | A sheet of terrain seen side-on is a cut-out. A soil section on a wooden base makes it a model |
+| Headset detected by name | `config.ts` | The only user-agent check in the game. A Quest's chip passes the memory and core test, and it is the double draw at 72 Hz that makes it low-power |
+
+**The culling camera ignored the rig's scale.** three culls a headset's view
+against one camera built to enclose both eyes. It measures the distance between
+the eyes in world space and uses it as view-space metres. Under a rig scaled by
+S, that pushed the camera's near plane out by about S × 2.7 cm: some 18 m with
+the whole catchment on the table. Nearly every mesh in this game has culling
+off already, for the curved world, so most of the scene was unaffected. The
+first symptom was a plinth that would not appear, even with a flat red
+material. Counting draw calls showed it was never submitted at all. The same
+fault also dropped the character as soon as the player zoomed out a little. The
+fix is not to turn culling off for everything that happened to be affected.
+`xr/unionCamera.ts` rebuilds that camera in rig space, and the test checks the
+property that matters: the combined frustum contains everything either eye can
+see, at every scale.
+
+**Measured cost, in an emulated Quest 3 with the low-power settings.** Before
+the headset tier, a frame was 3.5 M triangles and about 440 draw calls. Trees
+were four fifths of the triangles, drawn three times a frame: shadow map, left
+eye, right eye. With trees thinned to 0.3 of full density and the shadow map
+redrawn every other frame, it is about 2.2 M and 370. That is still a lot for a
+Quest 2. It is the first number to check on a real headset, and the levers are,
+in order:
+
+- the vegetation density,
+- the framebuffer scale (`gl.xr.setFramebufferScaleFactor`),
+- per-chunk instancing, so distant woods can be culled.
+
+**Verified in an emulator, not yet on a headset.** Meta's Immersive Web
+Emulation Runtime ran the built game as a Quest 3 in Chrome. The checks covered:
+
+- entering VR,
+- walking,
+- the risk map,
+- pressing dashboard buttons with the controller ray,
+- snap turn,
+- zooming to the board and back,
+- stereo,
+- exiting to a page whose HUD and camera had kept up.
+
+Comfort, legibility on real optics, and frame rate still need the device.
+

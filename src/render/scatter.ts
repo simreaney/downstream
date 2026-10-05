@@ -13,7 +13,7 @@
 import * as THREE from "three";
 import type { GridSpec } from "../core/grid";
 import { createRng, splitSeed, type Rng } from "../core/rng";
-import { isLowPower } from "../config";
+import { isLowPower, isStandaloneHeadset } from "../config";
 import { LandCover } from "../scimap/constants";
 import type { Obstacle } from "../player/controller";
 import { leakyDam } from "../props/dam";
@@ -67,13 +67,17 @@ const ROCK_DENSITY: Partial<Record<LandCover, number>> = {
 };
 
 /**
- * Instance budgets, thinned on low-power devices.
+ * Instance budgets, thinned on low-power devices, and further on a standalone
+ * headset.
  *
  * Vegetation is the only thing scaled: it is by far the largest instance count
  * and the least load-bearing. The catchment still reads as wooded where the
- * model says it is wooded — there are simply fewer trees doing it.
+ * model says it is wooded — there are simply fewer trees doing it. Measured at
+ * the low-power setting, trees were about four fifths of every frame's
+ * triangles, and a headset draws each one three times a frame: into the shadow
+ * map, then once for each eye.
  */
-const DENSITY_SCALE = isLowPower() ? 0.45 : 1;
+const DENSITY_SCALE = isStandaloneHeadset() ? 0.3 : isLowPower() ? 0.45 : 1;
 
 /**
  * Headroom over the expected instance count, and the floor under it.

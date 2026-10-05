@@ -64,6 +64,11 @@ export interface FollowCamera {
   update(target: THREE.Vector3, lookX: number, lookY: number, dt: number, zoom?: number): void;
   /** Step to the next zoom stop outwards, wrapping back in from the furthest. */
   cycleZoom(): void;
+  /**
+   * Snap to the wanted pose on the next update instead of easing towards it —
+   * after a headset session, which leaves the camera wherever the headset was.
+   */
+  reset(): void;
 }
 
 export function createFollowCamera(
@@ -95,6 +100,10 @@ export function createFollowCamera(
     cycleZoom() {
       const next = ZOOM_STOPS.find((stop) => stop > targetDistance * 1.05);
       targetDistance = next ?? ZOOM_STOPS[0];
+    },
+
+    reset() {
+      initialised = false;
     },
 
     update(target, lookX, lookY, dt, zoom = 0) {

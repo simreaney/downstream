@@ -245,6 +245,29 @@ kbd {
   display: none;
 }
 
+/* Shown only where an immersive session can start; see xr/mode.ts. */
+.hud__vr {
+  padding: 0.4rem 0.8rem;
+  border: none;
+  border-radius: 999px;
+  background: var(--accent);
+  box-shadow: var(--shadow);
+  font: inherit;
+  font-size: 0.82rem;
+  font-weight: 650;
+  color: #fff;
+  cursor: pointer;
+}
+
+.hud__vr[hidden] {
+  display: none;
+}
+
+.hud__vr:disabled {
+  opacity: 0.6;
+  cursor: progress;
+}
+
 .hud__readout--ok {
   color: var(--accent-deep);
 }

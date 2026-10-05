@@ -48,6 +48,9 @@ export function createRenderer(canvas: HTMLCanvasElement): Renderer {
   // variant, which three now maps onto this anyway: the radius is what gives the
   // faint, feathered overcast-day shadows the art direction asks for.
   gl.shadowMap.type = THREE.PCFShadowMap;
+  // Lets a headset session take over the loop below; costs nothing until one
+  // starts. Everything specific to VR lives in `xr/`.
+  gl.xr.enabled = true;
 
   const scene = new THREE.Scene();
   scene.background = new THREE.Color(0xf5ecdc);
@@ -67,6 +70,9 @@ export function createRenderer(canvas: HTMLCanvasElement): Renderer {
   let running = false;
 
   const resize = (): void => {
+    // A headset session owns the drawing buffer's size while it presents, and
+    // three restores the page's size when it ends.
+    if (gl.xr.isPresenting) return;
     // Re-read on every resize: dragging the window to a display with a
     // different pixel ratio fires one, and the buffer should follow.
     gl.setPixelRatio(Math.min(window.devicePixelRatio, MAX_PIXEL_RATIO));

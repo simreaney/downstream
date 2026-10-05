@@ -34,6 +34,41 @@ this layout regardless of brand, so it's read as Xbox-style buttons even from a
 PlayStation pad. Connect it and press a button once to wake it up; browsers
 only report a gamepad after its first input.
 
+## VR on a Meta Quest
+
+Open the game in the Quest's browser and press **Enter VR**, under the controls
+hint. The button only appears where a headset session can start. In the headset
+the catchment becomes a tabletop diorama: your character stands on a table in
+front of you, and you look around by moving your head. Zoom all the way out and
+the whole catchment is laid out on the table as a model, on its own plinth.
+
+| Touch controllers | |
+|---|---|
+| left stick / left trigger | walk / run |
+| right stick ← → / ↑ ↓ | turn the table in 30° snaps / zoom |
+| right stick click | step through close, mid and whole-catchment zoom |
+| A or right trigger | build at the cell you are facing |
+| B | gather |
+| X / Y | next risk layer / turn it off |
+| left grip / right grip | previous / next tool |
+
+Everything else — storms, undo, save, choosing a tool or a layer directly, and
+leaving VR — is on the panel at the left of the table. Point the right
+controller at it and pull the trigger. The placement readout floats over your
+character.
+
+WebXR only runs on a secure origin, so to try a local build on the headset,
+forward the dev server over USB rather than opening it by LAN address:
+
+```
+npm run dev
+adb reverse tcp:5173 tcp:5173      # then open http://localhost:5173/downstream/play/ on the Quest
+```
+
+Standalone headsets get a lighter scene than desktops (fewer trees, and the
+shadow map redrawn every other frame), because they draw every frame twice at
+72 Hz or more.
+
 ## Running it
 
 ```
@@ -77,6 +112,7 @@ sim/      Gumbel storm depths, lag-and-route flood model
 worker/   owns the canonical arrays; the main thread never sees them
 render/   one terrain mesh, instanced props, toon + curved-world shaders
 game/     interventions, validity, scoring, receptors, save
+xr/       the headset: tabletop rig, controllers, canvas HUD, plinth
 ```
 
 The simulation runs in one Web Worker. The main thread keeps copies of only the

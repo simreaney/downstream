@@ -42,7 +42,7 @@ import { createInput, type GameAction } from "./player/input";
 import { createPlacementGhost } from "./player/placementGhost";
 import { facingTarget } from "./player/targeting";
 import { createAudio } from "./audio/engine";
-import { createHud } from "./ui/hud";
+import { createHud, mirrorHud } from "./ui/hud";
 import { createTutorial } from "./ui/tutorial";
 import { createHydrographChart } from "./ui/hydrographChart";
 import { createScorePanel } from "./ui/scorePanel";
@@ -52,6 +52,8 @@ import { createRenderer } from "./render/renderer";
 import { buildWorldScene } from "./render/scene";
 import { cellToWorld, worldToCell } from "./render/terrainMesh";
 import { createSimClient } from "./worker/client";
+import { createXrHud } from "./xr/hud";
+import { createXrMode } from "./xr/mode";
 
 const BOOT_MARKUP = `
   <div class="boot-status" id="boot-status">
@@ -167,7 +169,10 @@ async function boot(): Promise<void> {
     Math.atan2(-start.x, -start.z),
   );
 
-  const hud = createHud(uiRoot);
+  // The headset's HUD is kept current alongside the page's whether or not a
+  // session is running, so putting the headset on shows the game as it stands.
+  const xrHud = createXrHud();
+  const hud = mirrorHud(createHud(uiRoot), xrHud);
   if (saveProblem) hud.toast(`${saveProblem} — starting a fresh one`);
   const legend = createOverlayLegend(uiRoot);
   const overviewMap = createOverviewMap(
@@ -193,6 +198,7 @@ async function boot(): Promise<void> {
     onLayerChange: (layer) => {
       legend.show(layer);
       overviewMap.setLayer(layer);
+      xrHud.setLayer(layer);
     },
   });
   overlay.adopt(world.overlay);
@@ -230,6 +236,17 @@ async function boot(): Promise<void> {
   const tutorial = createTutorial(uiRoot, restored !== null);
   const scorePanel = createScorePanel(uiRoot);
 
+  const xr = createXrMode({
+    renderer,
+    scene,
+    hud: xrHud,
+    tutorial,
+    buttonHost: uiRoot.querySelector(".hud") as HTMLElement,
+    heading: () => camera.yaw,
+    notify: (text) => hud.toast(text),
+    onExit: () => camera.reset(),
+  });
+
   // The score's denominator: the catchment as it was found. Frozen at
   // generation, for the same reason the stretch bounds are — recomputing it
   // later would quietly reset the player's progress to zero.
@@ -263,6 +280,7 @@ async function boot(): Promise<void> {
       lastStorm && lastStorm.signature === storageSignature(build.interventions) ? lastStorm : null;
     scores = computeScores(latestMetrics, baseline, storm, storage, designStormVolumeM3);
     scorePanel.set(scores);
+    xrHud.setScores(scores);
   };
 
   const build = createBuildController({
@@ -420,7 +438,8 @@ async function boot(): Promise<void> {
       return;
     }
     if (action === "zoomCycle") {
-      camera.cycleZoom();
+      if (xr.presenting) xr.diorama.cycleZoom();
+      else camera.cycleZoom();
       return;
     }
 
@@ -435,6 +454,7 @@ async function boot(): Promise<void> {
       }
       overviewMap.clearResource(node.id);
       audio.play("gather");
+      xr.pulse(0.3, 30);
       tutorial.complete("gather");
       if (node.kind === "wood") {
         inventory.gain(WOOD_PER_NODE, 0);
@@ -461,9 +481,11 @@ async function boot(): Promise<void> {
           hud.toast(result.message);
           if (!result.placed) {
             audio.play("refuse");
+            xr.pulse(0.15, 25);
             return;
           }
           audio.play(kind === "tree" ? "plant" : kind === "pond" ? "dig" : "build");
+          xr.pulse(0.5, 50);
           if (kind === "tree") tutorial.complete("plant");
         })
         .catch((error: unknown) => {
@@ -542,20 +564,35 @@ async function boot(): Promise<void> {
   const sightTarget = new THREE.Vector3();
 
   renderer.onFrame((dt, elapsed) => {
-    input.poll(dt);
+    // In a headset, intent comes from the controllers and "forward" is where
+    // the player is looking; on the page, from the keyboard, mouse or gamepad
+    // and the follow camera. Everything after this is the same game.
+    const immersive = xr.presenting;
+    if (immersive) xr.poll(dt);
+    else input.poll(dt);
+    const intent = immersive ? xr.state : input.state;
     scene.water.update(elapsed);
     storm.update(dt);
-    player.update(input.state, camera.yaw, dt);
-    camera.update(player.position, input.state.lookX, input.state.lookY, dt, input.state.zoom);
-    // Flatter world and wider shadows as the camera pulls back; exactly the
-    // default look at the default distance and closer.
-    setCurvatureScale(scene.curvature, Math.min(1, (DEFAULT_CAMERA_DISTANCE / camera.distance) ** 2));
-    scene.lighting.setShadowReach(camera.distance);
+    player.update(intent, immersive ? xr.heading : camera.yaw, dt);
     sightTarget.copy(player.position);
     sightTarget.y += 1.2;
-    scene.props.fade.set(renderer.camera.position, sightTarget);
+    if (immersive) {
+      xr.update(player.position, dt);
+      // A tabletop is flat; see `xr/diorama.ts` for why the bend would all
+      // but vanish at this scale anyway.
+      setCurvatureScale(scene.curvature, 0);
+      scene.lighting.setShadowReach(xr.diorama.viewDistance);
+      scene.props.fade.set(xr.eye, sightTarget);
+    } else {
+      camera.update(player.position, intent.lookX, intent.lookY, dt, intent.zoom);
+      // Flatter world and wider shadows as the camera pulls back; exactly the
+      // default look at the default distance and closer.
+      setCurvatureScale(scene.curvature, Math.min(1, (DEFAULT_CAMERA_DISTANCE / camera.distance) ** 2));
+      scene.lighting.setShadowReach(camera.distance);
+      scene.props.fade.set(renderer.camera.position, sightTarget);
+    }
     input.endFrame();
-    const actions = input.state.actions;
+    const actions = intent.actions;
     if (actions) for (const action of actions) handleAction(action);
     overlay.update(dt);
     if (overviewMap.visible) overviewMap.setPlayer(player.position.x, player.position.z, player.yaw);
@@ -591,7 +628,8 @@ async function boot(): Promise<void> {
     const node = resources.nearest(player.position.x, player.position.z);
     if (node) {
       ghost.hide();
-      hud.setReadout(`E — take ${node.kind === "spade" ? "the spade" : node.kind}`, true, false);
+      const key = immersive ? "B" : "E";
+      hud.setReadout(`${key} — take ${node.kind === "spade" ? "the spade" : node.kind}`, true, false);
       return;
     }
 

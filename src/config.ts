@@ -108,6 +108,8 @@ export const FILL_EPSILON = 1e-6;
  * which lies and dates badly. The compute core is untouched either way — the
  * science is the same on a phone as on a workstation, and only what is drawn
  * changes, so a screenshot from a low-end device still reports the truth.
+ *
+ * A standalone headset is the one exception; see `isStandaloneHeadset`.
  */
 export function isLowPower(): boolean {
   if (typeof navigator === "undefined") return false;
@@ -115,5 +117,25 @@ export function isLowPower(): boolean {
   const cores = navigator.hardwareConcurrency ?? 4;
   const coarsePointer =
     typeof matchMedia === "function" && matchMedia("(pointer: coarse)").matches;
-  return (memory !== undefined && memory <= 4) || cores <= 4 || coarsePointer;
+  return (
+    (memory !== undefined && memory <= 4) || cores <= 4 || coarsePointer || isStandaloneHeadset()
+  );
+}
+
+/**
+ * Whether this is the browser of a standalone headset, such as a Meta Quest's.
+ *
+ * Detected by name, against the rule `isLowPower` follows, because the
+ * hardware test cannot see the problem. A Quest's chip passes it as a
+ * flagship phone would. What makes the headset low-power is the work it
+ * does: every frame is drawn twice, once per eye, at 72 Hz or more, and
+ * three only has the multiview path that would share that work in its
+ * WebGPU renderer. Only the browser can be detected this way, not the
+ * session, because the detail settings are fixed when the world is built,
+ * before the player has pressed "Enter VR". A Quest tethered to a PC renders
+ * on the PC's GPU in the PC's browser, so it is correctly left out.
+ */
+export function isStandaloneHeadset(): boolean {
+  if (typeof navigator === "undefined") return false;
+  return /OculusBrowser|Quest|Wolvic|PicoBrowser/i.test(navigator.userAgent);
 }

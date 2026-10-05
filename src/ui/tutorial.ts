@@ -23,28 +23,35 @@ export type TutorialGoal =
 interface Step {
   readonly goal: TutorialGoal;
   readonly text: string;
+  /** The same step, with the controls named for a headset's controllers. */
+  readonly vrText: string;
 }
 
 const STEPS: Step[] = [
   {
     goal: "walk",
     text: "This catchment is losing soil to its river. Walk about with WASD and take a look.",
+    vrText: "This catchment is losing soil to its river. Walk about with the left stick and take a look.",
   },
   {
     goal: "openMap",
     text: "Press M for the risk map. Bright means erodible ground that is well connected to a watercourse — that is where sediment comes from.",
+    vrText: "Press X for the risk map. Bright means erodible ground that is well connected to a watercourse — that is where sediment comes from.",
   },
   {
     goal: "gather",
     text: "Press E by a log pile or boulder to gather. You will need wood to plant and stone to dig.",
+    vrText: "Press B by a log pile or boulder to gather. You will need wood to plant and stone to dig.",
   },
   {
     goal: "plant",
     text: "Face a bright patch near the river and press F to plant. Watch the map and the water.",
+    vrText: "Face a bright patch near the river and press A to plant. Watch the map and the water.",
   },
   {
     goal: "storm",
     text: "Trees are only half of it. Press R to send a storm through and see what your work does to the flood.",
+    vrText: "Trees are only half of it. Point at Storm on this panel and pull the trigger to see what your work does to the flood.",
   },
 ];
 
@@ -58,7 +65,11 @@ const MARKUP = `
 export interface Tutorial {
   /** Report that the player did something; advances if it was what we wanted. */
   complete(goal: TutorialGoal): void;
+  /** Dismiss the rest of the tutorial, as the Skip button does. */
+  skip(): void;
   readonly finished: boolean;
+  /** The step on show, in both wordings; null once finished. */
+  readonly current: { readonly text: string; readonly vrText: string } | null;
   dispose(): void;
 }
 
@@ -80,10 +91,11 @@ export function createTutorial(root: HTMLElement, skip: boolean): Tutorial {
     panel.hidden = false;
   };
 
-  skipButton.addEventListener("click", () => {
+  const dismiss = (): void => {
     index = STEPS.length;
     render();
-  });
+  };
+  skipButton.addEventListener("click", dismiss);
 
   render();
 
@@ -91,6 +103,12 @@ export function createTutorial(root: HTMLElement, skip: boolean): Tutorial {
     get finished() {
       return index >= STEPS.length;
     },
+
+    get current() {
+      return index < STEPS.length ? STEPS[index] : null;
+    },
+
+    skip: dismiss,
 
     complete(goal) {
       if (index >= STEPS.length) return;

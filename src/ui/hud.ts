@@ -106,3 +106,20 @@ export function createHud(root: HTMLElement): Hud {
     },
   };
 }
+
+/**
+ * One `Hud` that forwards every call to several.
+ *
+ * The page's HUD and the headset's (`xr/hud.ts`) are kept current together,
+ * so either can be the one on show at any moment — the player can take the
+ * headset off mid-game and find the page already says what the panel did.
+ */
+export function mirrorHud(...huds: readonly Hud[]): Hud {
+  return {
+    setInventory: (state) => huds.forEach((hud) => hud.setInventory(state)),
+    setTool: (kind) => huds.forEach((hud) => hud.setTool(kind)),
+    setReadout: (message, ok, warn) => huds.forEach((hud) => hud.setReadout(message, ok, warn)),
+    toast: (message) => huds.forEach((hud) => hud.toast(message)),
+    dispose: () => huds.forEach((hud) => hud.dispose()),
+  };
+}
