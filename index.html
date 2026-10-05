@@ -12,7 +12,7 @@
     <meta property="og:title" content="Downstream — a diffuse pollution game" />
     <meta
       property="og:description"
-      content="Repair a river catchment with leaky dams, ponds and trees, guided by a live SCIMAP risk map. Free, in the browser."
+      content="Repair a river catchment with leaky dams, ponds and trees, guided by a live SCIMAP risk map. Free, in the browser or in VR."
     />
     <meta property="og:url" content="https://simreaney.github.io/downstream/" />
     <meta property="og:image" content="https://simreaney.github.io/downstream/media/hero.jpg" />
@@ -418,6 +418,15 @@
         margin-top: 32px;
       }
 
+      /* VR: the controls table sits under the two screenshots. Its second
+         column is prose, so unlike the keyboard table it may wrap. */
+      .vr-controls {
+        margin-top: 72px;
+      }
+      .vr-controls td:nth-child(2) {
+        white-space: normal;
+      }
+
       .cta {
         text-align: center;
       }
@@ -563,7 +572,10 @@
           </a>
           <a class="button button--quiet" href="#trailer">Watch the trailer</a>
         </div>
-        <p class="hero__note">Free, in the browser, nothing to install. Works with a keyboard and mouse or any game controller.</p>
+        <p class="hero__note">
+          Free, in the browser, nothing to install. Works with a keyboard and mouse or any game
+          controller, and <a href="#vr">in VR on a Meta Quest</a>.
+        </p>
       </div>
     </header>
 
@@ -780,8 +792,102 @@
             <h3>What it runs on</h3>
             <p>
               Any recent desktop browser with WebGL. It’s built for a laptop or desktop: on a phone
-              you can look around, but you’ll need a controller to walk.
+              you can look around, but you’ll need a controller to walk. On a Meta Quest it runs
+              <a href="#vr">in VR</a>.
             </p>
+          </div>
+        </div>
+      </section>
+
+      <section id="vr">
+        <div class="wrap">
+          <div class="section-head">
+            <p class="eyebrow">In VR</p>
+            <h2>Put the catchment on a table</h2>
+            <p>
+              On a Meta Quest, Downstream becomes the diorama it’s drawn to look like. Open the game
+              in the headset’s browser and press <strong>Enter VR</strong>: the catchment shrinks
+              onto a table in front of you, your character stands on it, and you look around by
+              moving your head.
+            </p>
+          </div>
+
+          <div class="features">
+            <article class="feature">
+              <a class="feature__shot frame" href="media/vr-table.jpg" data-caption="At the table, pointing at the panel">
+                <img src="/media/vr-table-960.jpg" srcset="/media/vr-table-960.jpg 960w, /media/vr-table.jpg 1920w" sizes="(max-width: 860px) 100vw, 640px" width="1920" height="1080" loading="lazy" alt="In a VR headset: the player's character stands on a tabletop landscape beside a stream and a tree, with a readout over its head. A panel at the left edge of the table shows wood, stone, the tools and catchment health, and a ray from the controller points at its Storm button." />
+              </a>
+              <div>
+                <p class="feature__step">At the table</p>
+                <h3>Look down on your own catchment</h3>
+                <p>
+                  Your character is about the size of a chess piece. As they walk, the landscape
+                  glides along beneath you, and it turns in snaps rather than swinging round, so
+                  the horizon stays level. The readout floats over their head, telling you what
+                  drains through a spot before you build.
+                </p>
+                <p>
+                  Everything else is on the panel at the edge of the table: point the right
+                  controller at it and pull the trigger.
+                </p>
+              </div>
+            </article>
+
+            <article class="feature">
+              <a class="feature__shot frame" href="media/vr-board.jpg" data-caption="The whole catchment as a tabletop model">
+                <img src="/media/vr-board-960.jpg" srcset="/media/vr-board-960.jpg 960w, /media/vr-board.jpg 1920w" sizes="(max-width: 860px) 100vw, 640px" width="1920" height="1080" loading="lazy" alt="Zoomed out in VR: the whole catchment as a model on a wooden plinth, with the source-risk map over it and the river network converging on the outlet notch at the front. The panel beside it shows the risk-map legend." />
+              </a>
+              <div>
+                <p class="feature__step">Zoomed out</p>
+                <h3>The whole model, within reach</h3>
+                <p>
+                  Push the right stick and the catchment comes to rest on the table as a model
+                  about 1.4 m across, on its own plinth, with the risk map laid over it. Lean in to
+                  follow a stream from the ridge to the outlet, or crouch to see the valley’s
+                  profile in the side of the board.
+                </p>
+              </div>
+            </article>
+          </div>
+
+          <div class="controls vr-controls">
+            <div class="table-scroll">
+              <table>
+                <thead>
+                  <tr><th scope="col">Touch controllers</th><th scope="col">Does</th></tr>
+                </thead>
+                <tbody>
+                  <tr><td>Left stick</td><td>Walk (left trigger to run)</td></tr>
+                  <tr><td>Right stick</td><td>Left and right turn the table; up and down zoom</td></tr>
+                  <tr><td>Right stick click</td><td>Jump between close up, halfway and the whole catchment</td></tr>
+                  <tr><td>A or right trigger</td><td>Build where you’re facing</td></tr>
+                  <tr><td>B</td><td>Gather wood, stone or the spade</td></tr>
+                  <tr><td>X / Y</td><td>Next risk layer / overlay off</td></tr>
+                  <tr><td>Grips</td><td>Previous and next tool</td></tr>
+                  <tr><td>Point at the panel</td><td>Storm, undo, save, pick a tool or layer, and leave VR</td></tr>
+                </tbody>
+              </table>
+            </div>
+            <div class="aside">
+              <h3>What you need</h3>
+              <p>
+                A Meta Quest and its own browser: no app and no install, and the same link as
+                everywhere else. The <strong>Enter VR</strong> button only appears in a browser that
+                can start a VR session, so you won’t see it on a laptop. Other headsets that support
+                WebXR may work too.
+              </p>
+              <h3>Sitting or standing</h3>
+              <p>
+                The table is set from your eye height when you start, so either works. If it ends up
+                in the wrong place, hold the Meta button on the right controller to recentre.
+              </p>
+              <h3>Lighter on a headset</h3>
+              <p>
+                A headset draws every frame twice, once for each eye, so it gets a lighter scene
+                than a desktop does: fewer trees, and shadows updated less often. The model
+                underneath is exactly the same.
+              </p>
+            </div>
           </div>
         </div>
       </section>

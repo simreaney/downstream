@@ -99,7 +99,10 @@ map, a leaky dam, a riparian buffer, a pond, and a design storm. It writes the
 landing page's `hero.mp4`, `trailer.mp4`, posters and screenshots into
 `public/media/`. It picks every build site with the game's own placement rules,
 so it keeps working when terrain generation changes. Re-run it after a visible
-change to the game. It needs `ffmpeg` on the `PATH`, and a GPU for a smooth
+change to the game. The two VR stills (`vr-table.jpg`, `vr-board.jpg`) are the
+exception: they were captured from the built game in Meta's emulated Quest 3
+(the `iwer` package), which `record.mjs` does not drive, so re-take them by hand
+if the headset view changes. It needs `ffmpeg` on the `PATH`, and a GPU for a smooth
 60 fps capture; on a Mac, headless Chrome gets one.
 
 ## How it fits together
