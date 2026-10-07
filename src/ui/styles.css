@@ -245,6 +245,20 @@ kbd {
   display: none;
 }
 
+/* The language menu: a quiet pill, like the chips, until it is opened. */
+.hud__lang {
+  padding: 0.3rem 0.6rem;
+  border: none;
+  border-radius: 999px;
+  background: var(--paper);
+  box-shadow: var(--shadow);
+  font: inherit;
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: var(--ink-soft);
+  cursor: pointer;
+}
+
 /* Shown only where an immersive session can start; see xr/mode.ts. */
 .hud__vr {
   padding: 0.4rem 0.8rem;
@@ -377,7 +391,8 @@ kbd {
   position: fixed;
   top: 1rem;
   right: 1rem;
-  width: 15rem;
+  /* Wider only when a translation's labels need it; 15rem in English. */
+  min-width: 15rem;
   padding: 0.65rem 0.8rem 0.7rem;
   border-radius: var(--radius);
   background: var(--paper);
@@ -400,11 +415,19 @@ kbd {
   line-height: 1;
 }
 
+/* One grid for all three rows, so the tracks start together after the
+   longest label in whatever language is showing. */
+#score-bars {
+  display: grid;
+  grid-template-columns: minmax(5.6rem, max-content) minmax(4.4rem, 1fr) 1.5rem 0.8rem;
+  column-gap: 0.35rem;
+}
+
 .score__row {
   display: grid;
-  grid-template-columns: 5.6rem 1fr 1.5rem 0.8rem;
+  grid-column: 1 / -1;
+  grid-template-columns: subgrid;
   align-items: center;
-  gap: 0.35rem;
   margin-top: 0.3rem;
 }
 

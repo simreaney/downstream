@@ -12,17 +12,19 @@
  */
 
 import type { Scores } from "../game/scoring";
+import { onLocaleChange, t, type MessageKey } from "../i18n";
 
-const BARS: { key: keyof Scores; label: string; hint: string }[] = [
-  { key: "waterQuality", label: "Water quality", hint: "sediment reaching the fishery" },
-  { key: "floodRisk", label: "Flood risk", hint: "peak flow at the village" },
-  { key: "habitat", label: "Habitat", hint: "continuous riverside cover" },
+/** Each bar, with the hint shown when the pointer rests on it. */
+const BARS: { key: keyof Scores; label: MessageKey; hint: MessageKey }[] = [
+  { key: "waterQuality", label: "score.waterQuality", hint: "score.waterQuality.hint" },
+  { key: "floodRisk", label: "score.floodRisk", hint: "score.floodRisk.hint" },
+  { key: "habitat", label: "score.habitat", hint: "score.habitat.hint" },
 ];
 
 const MARKUP = `
   <div class="score" id="score">
     <div class="score__head">
-      <span>Catchment health</span>
+      <span id="score-title"></span>
       <strong id="score-overall">0</strong>
     </div>
     <div id="score-bars"></div>
@@ -42,13 +44,23 @@ export function createScorePanel(root: HTMLElement): ScorePanel {
 
   container.innerHTML = BARS.map(
     (bar) => `
-    <div class="score__row" title="${bar.hint}">
-      <span class="score__label">${bar.label}</span>
+    <div class="score__row" id="score-${bar.key}-row">
+      <span class="score__label" id="score-${bar.key}-label"></span>
       <span class="score__track"><i id="score-${bar.key}"></i></span>
       <span class="score__value" id="score-${bar.key}-value">0</span>
       <span class="score__trend" id="score-${bar.key}-trend"></span>
     </div>`,
   ).join("");
+
+  const relabel = (): void => {
+    (root.querySelector("#score-title") as HTMLElement).textContent = t("score.title");
+    for (const bar of BARS) {
+      (root.querySelector(`#score-${bar.key}-row`) as HTMLElement).title = t(bar.hint);
+      (root.querySelector(`#score-${bar.key}-label`) as HTMLElement).textContent = t(bar.label);
+    }
+  };
+  relabel();
+  const stopLabelling = onLocaleChange(relabel);
 
   const previous = new Map<string, number>();
   let trendTimer = 0;
@@ -86,6 +98,7 @@ export function createScorePanel(root: HTMLElement): ScorePanel {
     },
 
     dispose() {
+      stopLabelling();
       window.clearTimeout(trendTimer);
       (root.querySelector("#score") as HTMLElement | null)?.remove();
     },

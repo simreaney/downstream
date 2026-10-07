@@ -164,7 +164,7 @@ export function handleGenerate(
   pristineCover = Uint8Array.from(world.arrays.landCover);
   overlayPool.length = 0;
 
-  onProgress?.(76, "3.1 Tracing the river network…");
+  onProgress?.(76, "stage.riverNetwork");
   const { arrays } = world;
   const d8 = arrays.d8Accum;
   reaches = traceStreams(arrays.channelMask, arrays.downstream, d8).map((line) => ({
@@ -172,7 +172,7 @@ export function handleGenerate(
     accum: line.accum,
   }));
 
-  onProgress?.(78, "3.2 Siting the village and the fishery…");
+  onProgress?.(78, "stage.sites");
   const chosen = chooseSites(
     arrays.spec,
     arrays.outlet,
@@ -188,7 +188,7 @@ export function handleGenerate(
     poolCells: fisheryPool(arrays.spec, chosen.fisheryCell, arrays.channelMask),
   };
 
-  onProgress?.(80, "3.3 Colouring the risk map…");
+  onProgress?.(80, "stage.colourMap");
   // The baseline is frozen here, on the pristine catchment, for exactly the same
   // reason the stretch bounds are: every score is a reduction against how the
   // catchment was *found*, so recomputing this later would silently reset the

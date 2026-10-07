@@ -10,6 +10,8 @@
 import type { InterventionKind } from "../game/interventions";
 import { costOf } from "../game/interventions";
 import type { InventoryState } from "../game/inventory";
+import { onLocaleChange, t, type MessageKey } from "../i18n";
+import { escapeHtml, kbd, keyLabel, keyLabels } from "./keys";
 
 const MARKUP = `
   <div class="hud">
@@ -20,20 +22,31 @@ const MARKUP = `
     </div>
     <div class="hud__tools" id="hud-tools"></div>
     <div class="hud__readout" id="hud-readout"></div>
-    <div class="hud__keys">
-      <kbd>WASD</kbd> walk &middot; <kbd>F</kbd> build &middot; <kbd>E</kbd> gather &middot;
-      <kbd>R</kbd> storm &middot; <kbd>Z</kbd> undo &middot; <kbd>K</kbd> save &middot;
-      <kbd>Tab</kbd> map &middot; <kbd>Scroll</kbd>/<kbd>&minus;</kbd><kbd>=</kbd> zoom
-    </div>
+    <div class="hud__keys" id="hud-keys"></div>
   </div>
   <div class="toast" id="toast" hidden></div>
 `;
 
-const TOOLS: { kind: InterventionKind; key: string; label: string }[] = [
-  { kind: "tree", key: "1", label: "Plant" },
-  { kind: "dam", key: "2", label: "Leaky dam" },
-  { kind: "pond", key: "3", label: "Pond" },
+const TOOLS: { kind: InterventionKind; code: string; label: MessageKey }[] = [
+  { kind: "tree", code: "Digit1", label: "tool.tree" },
+  { kind: "dam", code: "Digit2", label: "tool.dam" },
+  { kind: "pond", code: "Digit3", label: "tool.pond" },
 ];
+
+/** The keyboard reminder under the readout, as key caps and what they do. */
+function keyHint(): string {
+  const pair = (keys: string, action: MessageKey): string => `${keys} ${escapeHtml(t(action))}`;
+  return [
+    pair(kbd(keyLabels("KeyW", "KeyA", "KeyS", "KeyD")), "hint.walk"),
+    pair(kbd(keyLabel("KeyF")), "hint.build"),
+    pair(kbd(keyLabel("KeyE")), "hint.gather"),
+    pair(kbd(keyLabel("KeyR")), "hint.storm"),
+    pair(kbd(keyLabel("KeyZ")), "hint.undo"),
+    pair(kbd(keyLabel("KeyK")), "hint.save"),
+    pair(kbd(keyLabel("Tab")), "hint.map"),
+    pair(`${kbd(t("key.scroll"))}/${kbd(keyLabel("Minus"))}${kbd(keyLabel("Equal"))}`, "hint.zoom"),
+  ].join(" &middot; ");
+}
 
 export interface Hud {
   setInventory(state: InventoryState): void;
@@ -52,15 +65,37 @@ export function createHud(root: HTMLElement): Hud {
   const spade = root.querySelector("#hud-spade") as HTMLElement;
   const tools = root.querySelector("#hud-tools") as HTMLElement;
   const readout = root.querySelector("#hud-readout") as HTMLElement;
+  const keys = root.querySelector("#hud-keys") as HTMLElement;
   const toastEl = root.querySelector("#toast") as HTMLElement;
 
-  tools.innerHTML = TOOLS.map((tool) => {
-    const cost = costOf(tool.kind);
-    const price = cost.wood > 0 ? `${cost.wood}🪵` : `${cost.stone}🪨`;
-    return `<button class="hud__tool" data-kind="${tool.kind}">
-      <kbd>${tool.key}</kbd><span>${tool.label}</span><em>${price}</em>
-    </button>`;
-  }).join("");
+  let tool: InterventionKind | null = null;
+  let hasSpade = false;
+
+  const highlightTool = (): void => {
+    for (const button of tools.querySelectorAll(".hud__tool")) {
+      button.classList.toggle("hud__tool--active", button.getAttribute("data-kind") === tool);
+    }
+  };
+
+  const showSpade = (): void => {
+    spade.textContent = hasSpade ? `🪏 ${t("hud.spade")}` : "🪏 —";
+  };
+
+  /** Everything with words in it; run again whenever the language changes. */
+  const relabel = (): void => {
+    tools.innerHTML = TOOLS.map((entry) => {
+      const cost = costOf(entry.kind);
+      const price = cost.wood > 0 ? `${cost.wood}🪵` : `${cost.stone}🪨`;
+      return `<button class="hud__tool" data-kind="${entry.kind}">
+        ${kbd(keyLabel(entry.code))}<span>${escapeHtml(t(entry.label))}</span><em>${price}</em>
+      </button>`;
+    }).join("");
+    highlightTool();
+    showSpade();
+    keys.innerHTML = keyHint();
+  };
+  relabel();
+  const stopLabelling = onLocaleChange(relabel);
 
   let toastTimer = 0;
 
@@ -70,14 +105,14 @@ export function createHud(root: HTMLElement): Hud {
     setInventory(state) {
       wood.textContent = `🪵 ${state.wood}`;
       stone.textContent = `🪨 ${state.stone}`;
-      spade.textContent = state.hasSpade ? "🪏 spade" : "🪏 —";
+      hasSpade = state.hasSpade;
+      showSpade();
       spade.classList.toggle("hud__chip--muted", !state.hasSpade);
     },
 
     setTool(kind) {
-      for (const button of tools.querySelectorAll(".hud__tool")) {
-        button.classList.toggle("hud__tool--active", button.getAttribute("data-kind") === kind);
-      }
+      tool = kind;
+      highlightTool();
     },
 
     setReadout(message, ok, warn) {
@@ -103,6 +138,7 @@ export function createHud(root: HTMLElement): Hud {
 
     dispose() {
       window.clearTimeout(toastTimer);
+      stopLabelling();
     },
   };
 }

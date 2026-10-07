@@ -12,8 +12,20 @@
  * the player needs is the ordering and the pattern.
  */
 
+import { onLocaleChange, t } from "../i18n";
 import { LAYER_STYLE, type LayerKey } from "../worker/overlayPack";
 import { LUTS } from "../worker/ramps";
+import { escapeHtml, kbd, keyLabel } from "./keys";
+
+/** A risk layer's translated name and one-line description. */
+export function layerText(layer: Exclude<LayerKey, "none">): { label: string; description: string } {
+  return { label: t(`layer.${layer}`), description: t(`layer.${layer}.description`) };
+}
+
+/** "M next layer · N off", with the keys as this keyboard prints them. */
+export function layerKeyHint(): string {
+  return `${kbd(keyLabel("KeyM"))} ${escapeHtml(t("hint.nextLayer"))} &middot; ${kbd(keyLabel("KeyN"))} ${escapeHtml(t("hint.off"))}`;
+}
 
 /** CSS gradient string sampled from the same lookup the overlay is packed with. */
 export function rampGradient(ramp: keyof typeof LUTS): string {
@@ -39,8 +51,8 @@ const MARKUP = `
     <div class="legend__title" id="legend-title"></div>
     <div class="legend__description" id="legend-description"></div>
     <div class="legend__ramp" id="legend-ramp"></div>
-    <div class="legend__ends"><span>lower</span><span>higher</span></div>
-    <div class="legend__hint"><kbd>M</kbd> next layer &middot; <kbd>N</kbd> off</div>
+    <div class="legend__ends"><span id="legend-lower"></span><span id="legend-higher"></span></div>
+    <div class="legend__hint" id="legend-hint"></div>
   </div>
 `;
 
@@ -51,21 +63,39 @@ export function createOverlayLegend(root: HTMLElement): OverlayLegend {
   const title = root.querySelector("#legend-title") as HTMLElement;
   const description = root.querySelector("#legend-description") as HTMLElement;
   const ramp = root.querySelector("#legend-ramp") as HTMLElement;
+  const lower = root.querySelector("#legend-lower") as HTMLElement;
+  const higher = root.querySelector("#legend-higher") as HTMLElement;
+  const hint = root.querySelector("#legend-hint") as HTMLElement;
+
+  let shown: LayerKey = "none";
+
+  const show = (layer: LayerKey): void => {
+    shown = layer;
+    if (layer === "none") {
+      panel.hidden = true;
+      return;
+    }
+    const text = layerText(layer);
+    title.textContent = text.label;
+    description.textContent = text.description;
+    ramp.style.background = rampGradient(LAYER_STYLE[layer].ramp);
+    panel.hidden = false;
+  };
+
+  const relabel = (): void => {
+    lower.textContent = t("legend.lower");
+    higher.textContent = t("legend.higher");
+    hint.innerHTML = layerKeyHint();
+    show(shown);
+  };
+  relabel();
+  const stopLabelling = onLocaleChange(relabel);
 
   return {
-    show(layer) {
-      if (layer === "none") {
-        panel.hidden = true;
-        return;
-      }
-      const style = LAYER_STYLE[layer];
-      title.textContent = style.label;
-      description.textContent = style.description;
-      ramp.style.background = rampGradient(style.ramp);
-      panel.hidden = false;
-    },
+    show,
 
     dispose() {
+      stopLabelling();
       panel.remove();
     },
   };

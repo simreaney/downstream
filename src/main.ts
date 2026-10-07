@@ -22,6 +22,7 @@ import {
   type SaveData,
 } from "./game/save";
 import { formatArea } from "./game/format";
+import { formatNumber, onLocaleChange, resolveLocale, setLocale, t, tn, type ProgressStage } from "./i18n";
 import { createBuildController } from "./game/buildController";
 import { createInventory } from "./game/inventory";
 import type { InterventionKind } from "./game/interventions";
@@ -43,6 +44,8 @@ import { createPlacementGhost } from "./player/placementGhost";
 import { facingTarget } from "./player/targeting";
 import { createAudio } from "./audio/engine";
 import { createHud, mirrorHud } from "./ui/hud";
+import { keyLabel, loadKeyboardLayout } from "./ui/keys";
+import { createLanguagePicker } from "./ui/languagePicker";
 import { createTutorial } from "./ui/tutorial";
 import { createHydrographChart } from "./ui/hydrographChart";
 import { createScorePanel } from "./ui/scorePanel";
@@ -57,7 +60,7 @@ import { createXrMode } from "./xr/mode";
 
 const BOOT_MARKUP = `
   <div class="boot-status" id="boot-status">
-    <div>Surveying the catchment…</div>
+    <div id="boot-heading"></div>
     <div class="boot-status__bar"><div class="boot-status__fill" id="boot-fill"></div></div>
     <div id="boot-message"></div>
   </div>
@@ -119,22 +122,33 @@ function storageSignature(interventions: readonly Intervention[]): string {
     .join(",");
 }
 
+/** The page's own title and description, which a search result or a tab shows. */
+function labelDocument(): void {
+  document.title = t("meta.title");
+  document.querySelector('meta[name="description"]')?.setAttribute("content", t("meta.description"));
+}
+
 async function boot(): Promise<void> {
   const canvas = document.getElementById("viewport") as HTMLCanvasElement | null;
   const uiRoot = document.getElementById("ui-root");
   if (!canvas || !uiRoot) throw new Error("play/index.html is missing #viewport or #ui-root");
 
+  // Asked for now and awaited only once the HUD needs key names, so it costs
+  // the loading screen nothing.
+  const keyboardLayout = loadKeyboardLayout();
+
   uiRoot.insertAdjacentHTML("beforeend", BOOT_MARKUP);
+  (document.getElementById("boot-heading") as HTMLElement).textContent = t("boot.surveying");
   const fill = document.getElementById("boot-fill") as HTMLElement;
   const message = document.getElementById("boot-message") as HTMLElement;
 
-  const setProgress = (progress: number, text?: string): void => {
+  const setProgress = (progress: number, stage?: ProgressStage): void => {
     fill.style.width = `${Math.round(progress)}%`;
-    if (text) message.textContent = text;
+    if (stage) message.textContent = t(stage);
   };
 
   const renderer = createRenderer(canvas);
-  setProgress(2, "Renderer ready");
+  setProgress(2, "stage.rendererReady");
 
   const sim = createSimClient();
   await sim.ping();
@@ -169,11 +183,15 @@ async function boot(): Promise<void> {
     Math.atan2(-start.x, -start.z),
   );
 
+  await keyboardLayout;
+
   // The headset's HUD is kept current alongside the page's whether or not a
   // session is running, so putting the headset on shows the game as it stands.
   const xrHud = createXrHud();
   const hud = mirrorHud(createHud(uiRoot), xrHud);
-  if (saveProblem) hud.toast(`${saveProblem} — starting a fresh one`);
+  const hudPanel = uiRoot.querySelector(".hud") as HTMLElement;
+  createLanguagePicker(hudPanel, { className: "hud__lang", releaseLetters: true });
+  if (saveProblem) hud.toast(t("toast.saveProblem", { problem: saveProblem }));
   const legend = createOverlayLegend(uiRoot);
   const overviewMap = createOverviewMap(
     uiRoot,
@@ -241,7 +259,7 @@ async function boot(): Promise<void> {
     scene,
     hud: xrHud,
     tutorial,
-    buttonHost: uiRoot.querySelector(".hud") as HTMLElement,
+    buttonHost: hudPanel,
     heading: () => camera.yaw,
     notify: (text) => hud.toast(text),
     onExit: () => camera.reset(),
@@ -317,10 +335,10 @@ async function boot(): Promise<void> {
     }
     try {
       await build.replay(restored.interventions);
-      hud.toast(`Restored — ${restored.interventions.length} features`);
+      hud.toast(tn("toast.restored", restored.interventions.length));
     } catch (error: unknown) {
       console.error(error);
-      hud.toast("That save could not be restored in full");
+      hud.toast(t("toast.restoreFailed"));
     }
   }
   refreshScores();
@@ -352,10 +370,10 @@ async function boot(): Promise<void> {
       const builtStorage = stormSignature !== "";
       hud.toast(
         cut > 0.5
-          ? `Storm passed — your work cut the peak by ${cut.toFixed(0)}%`
+          ? t("toast.stormCut", { cut: formatNumber(cut) })
           : builtStorage
-            ? "Storm passed — your ponds and dams barely changed this peak"
-            : "Storm passed — nothing built upstream to slow it",
+            ? t("toast.stormBarely")
+            : t("toast.stormNothing"),
       );
     },
   });
@@ -386,7 +404,7 @@ async function boot(): Promise<void> {
       .then((playback) => storm.start(playback))
       .catch((error: unknown) => {
         console.error(error);
-        hud.toast("The storm could not be simulated");
+        hud.toast(t("toast.stormFailed"));
       })
       .finally(() => {
         stormBusy = false;
@@ -458,13 +476,13 @@ async function boot(): Promise<void> {
       tutorial.complete("gather");
       if (node.kind === "wood") {
         inventory.gain(WOOD_PER_NODE, 0);
-        hud.toast(`+${WOOD_PER_NODE} wood`);
+        hud.toast(t("toast.gainWood", { count: WOOD_PER_NODE }));
       } else if (node.kind === "stone") {
         inventory.gain(0, STONE_PER_NODE);
-        hud.toast(`+${STONE_PER_NODE} stone`);
+        hud.toast(t("toast.gainStone", { count: STONE_PER_NODE }));
       } else {
         inventory.giveSpade();
-        hud.toast("You found a spade — you can dig ponds now");
+        hud.toast(t("toast.foundSpade"));
       }
       return;
     }
@@ -490,7 +508,7 @@ async function boot(): Promise<void> {
         })
         .catch((error: unknown) => {
           console.error(error);
-          hud.toast("That could not be built — nothing was spent");
+          hud.toast(t("toast.buildFailed"));
         })
         .finally(() => {
           busy = false;
@@ -502,14 +520,14 @@ async function boot(): Promise<void> {
       // Checked before deferring the weather: a press while a storm is already
       // on its way must not quietly push the next scheduled one back.
       if (stormBusy || storm.running) {
-        hud.toast("A storm is already passing");
+        hud.toast(t("toast.stormBusy"));
         return;
       }
       tutorial.complete("storm");
       weather.defer(STORM_COOLDOWN_DAYS);
       runStorm(
         depthForReturnPeriod(gumbel, TEST_STORM_RETURN_PERIOD_DAYS),
-        "A 1-in-30 storm is coming…",
+        t("toast.stormComing", { days: TEST_STORM_RETURN_PERIOD_DAYS }),
       );
       return;
     }
@@ -535,12 +553,12 @@ async function boot(): Promise<void> {
           // grant on a user gesture, and a failed copy must not lose the save.
           try {
             await navigator.clipboard.writeText(url);
-            hud.toast("Saved — link copied to clipboard");
+            hud.toast(t("toast.saved"));
           } catch {
-            hud.toast("Saved — the link is in your address bar");
+            hud.toast(t("toast.savedAddressBar"));
           }
         })
-        .catch(() => hud.toast("Could not save"));
+        .catch(() => hud.toast(t("toast.saveFailed")));
       return;
     }
 
@@ -552,7 +570,7 @@ async function boot(): Promise<void> {
         .then((result) => hud.toast(result.message))
         .catch((error: unknown) => {
           console.error(error);
-          hud.toast("Could not undo that — try again");
+          hud.toast(t("toast.undoFailed"));
         })
         .finally(() => {
           busy = false;
@@ -617,7 +635,7 @@ async function boot(): Promise<void> {
     // long playback cannot stack the next one on top of it.
     if (!storm.running && !stormBusy) {
       const due = weather.tick(dt);
-      if (due) runStorm(due.depthMm, `Rain moving in — ${due.depthMm.toFixed(0)} mm`);
+      if (due) runStorm(due.depthMm, t("toast.rain", { depth: formatNumber(due.depthMm) }));
     }
     scene.fish.setVisibleCount(receptors.fishCount);
 
@@ -628,8 +646,14 @@ async function boot(): Promise<void> {
     const node = resources.nearest(player.position.x, player.position.z);
     if (node) {
       ghost.hide();
-      const key = immersive ? "B" : "E";
-      hud.setReadout(`${key} — take ${node.kind === "spade" ? "the spade" : node.kind}`, true, false);
+      const key = immersive ? "B" : keyLabel("KeyE");
+      hud.setReadout(
+        t(node.kind === "wood" ? "readout.takeWood" : node.kind === "stone" ? "readout.takeStone" : "readout.takeSpade", {
+          key,
+        }),
+        true,
+        false,
+      );
       return;
     }
 
@@ -639,9 +663,9 @@ async function boot(): Promise<void> {
 
     hud.setReadout(
       check.ok
-        ? `${formatArea(check.interceptedAreaM2)} drains through here${
-            helpful ? "" : " — planting here would raise erosion slightly"
-          }`
+        ? t(helpful ? "readout.drains" : "readout.drainsRaisesErosion", {
+            area: formatArea(check.interceptedAreaM2),
+          })
         : check.message,
       check.ok,
       check.ok && !helpful,
@@ -669,7 +693,7 @@ async function boot(): Promise<void> {
     if (action) handleAction(action);
   });
 
-  setProgress(100, "Ready");
+  setProgress(100, "stage.ready");
   document.getElementById("boot-status")?.setAttribute("hidden", "");
 
   console.info(
@@ -694,7 +718,7 @@ async function boot(): Promise<void> {
 async function resolveSave(): Promise<{ save: SaveData | null; problem: string | null }> {
   let problem: string | null = null;
   const describe = (error: unknown): string =>
-    error instanceof Error ? error.message : "That save could not be read";
+    error instanceof Error ? error.message : t("save.unreadable");
 
   const shared = readShareCode();
   if (shared) {
@@ -750,13 +774,18 @@ function readLandscapeSize(): LandscapeSizeId {
   return LANDSCAPE_SIZES.find((option) => option.id === fromUrl)?.id ?? DEFAULT_LANDSCAPE_SIZE;
 }
 
+// Before anything is drawn, so even the loading screen is in the player's language.
+setLocale(resolveLocale());
+labelDocument();
+onLocaleChange(labelDocument);
+
 boot().catch((error: unknown) => {
   // Built as text, not HTML: the message can carry whatever a failed request
   // or a hand-edited share code put in it.
   const panel = document.createElement("div");
   panel.className = "boot-status";
   const heading = document.createElement("div");
-  heading.textContent = "Could not start.";
+  heading.textContent = t("boot.failed");
   const detail = document.createElement("div");
   detail.textContent = error instanceof Error ? error.message : String(error);
   panel.append(heading, detail);

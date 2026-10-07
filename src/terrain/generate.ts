@@ -44,10 +44,10 @@ export function generateTerrain(seed: number, options: TerrainOptions = {}): Ter
   const spec = options.spec ?? GRID;
   const onProgress = options.onProgress;
 
-  onProgress?.(2, "1.1 Raising the ground…");
+  onProgress?.(2, "stage.raiseGround");
   const surface = generateBaseSurface(spec, createRng(splitSeed(seed, "terrain:base")));
 
-  onProgress?.(6, "1.2 Shaping the catchment…");
+  onProgress?.(6, "stage.shapeCatchment");
   const { dem, outlet } = conditionSurface(
     spec,
     surface,
@@ -61,20 +61,20 @@ export function generateTerrain(seed: number, options: TerrainOptions = {}): Ter
   // erosion spends its effort carving the drainage network instead of fighting
   // artefacts of the noise. The pipeline fills again at the end to catch the
   // shallow pits erosion itself creates.
-  onProgress?.(8, "1.3 Draining the hollows…");
+  onProgress?.(8, "stage.drainHollows");
   fillDepressions(dem, spec, outlet);
 
-  onProgress?.(10, "1.4 Cutting the valleys…");
+  onProgress?.(10, "stage.cutValleys");
   erode(dem, spec, createRng(splitSeed(seed, "terrain:erosion")), {
     ...DEFAULT_EROSION,
     droplets: defaultDropletsFor(spec),
     ...options.erosion,
   });
 
-  onProgress?.(26, "1.5 Settling the slopes…");
+  onProgress?.(26, "stage.settleSlopes");
   thermalErode(dem, spec, options.thermalSweeps ?? DEFAULT_THERMAL_SWEEPS);
 
-  onProgress?.(30, "1.6 Smoothing…");
+  onProgress?.(30, "stage.smooth");
   smooth(dem, spec, options.smoothSigma);
 
   // The smoothing pass runs over the whole grid including the outlet, so the
@@ -94,7 +94,7 @@ export function generateTerrain(seed: number, options: TerrainOptions = {}): Ter
   }
   dem[outlet] = lowestNeighbour - 1;
 
-  onProgress?.(32, "1.7 Topography ready.");
+  onProgress?.(32, "stage.topographyReady");
   return { spec, seed, dem, outlet };
 }
 

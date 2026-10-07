@@ -19,6 +19,7 @@
  */
 
 import { DEFAULT_LANDSCAPE_SIZE, LANDSCAPE_SIZES, landscapeSpec, type LandscapeSizeId } from "../config";
+import { t } from "../i18n";
 import type { Intervention, InterventionKind } from "./interventions";
 
 /**
@@ -109,7 +110,7 @@ function stock(value: unknown): number {
  * grid would otherwise reach the renderer as a feature with no ground under it.
  */
 function fromWire(wire: WireSave): SaveData {
-  if (!Array.isArray(wire.i)) throw new Error("That does not look like a catchment code");
+  if (!Array.isArray(wire.i)) throw new Error(t("save.notACode"));
 
   // An older save with no recorded size predates adjustable sizes, so it was
   // always the shipped default.
@@ -123,7 +124,7 @@ function fromWire(wire: WireSave): SaveData {
     const kind = KINDS[wire.i[i]];
     const cell = wire.i[i + 1];
     if (!kind || !Number.isInteger(cell) || cell < 0 || cell >= cellCount) {
-      throw new Error("That code has a feature outside its landscape");
+      throw new Error(t("save.outside"));
     }
     const at = Number.isFinite(wire.i[i + 2]) ? wire.i[i + 2] : 0;
     interventions.push({ kind, id: interventions.length + 1, cell, at });
@@ -180,15 +181,13 @@ export async function deserialise(code: string): Promise<SaveData> {
   const wire = JSON.parse(json) as WireSave;
 
   if (typeof wire.v !== "number" || typeof wire.s !== "number") {
-    throw new Error("That does not look like a catchment code");
+    throw new Error(t("save.notACode"));
   }
   if (wire.v > SAVE_VERSION) {
-    throw new Error(`That save is from a newer version (${wire.v})`);
+    throw new Error(t("save.newer", { version: wire.v }));
   }
   if (wire.v < MIN_SAVE_VERSION) {
-    throw new Error(
-      "That save was made with an older landscape generator, so it would open a different catchment",
-    );
+    throw new Error(t("save.older"));
   }
   return fromWire(wire);
 }

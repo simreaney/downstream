@@ -17,35 +17,17 @@ import { LUTS, type RampName } from "./ramps";
 /** Which layer the overlay is currently showing. */
 export type LayerKey = "none" | "connectivity" | "erosion" | "sourceRisk" | "inChannel";
 
-/** Ramp and masking behaviour per layer. */
-export const LAYER_STYLE: Record<
-  Exclude<LayerKey, "none">,
-  { ramp: RampName; channelOnly: boolean; label: string; description: string }
-> = {
-  connectivity: {
-    ramp: "viridis",
-    channelOnly: false,
-    label: "Connectivity",
-    description: "How reliably runoff here reaches a watercourse",
-  },
-  erosion: {
-    ramp: "magma",
-    channelOnly: false,
-    label: "Erosion risk",
-    description: "Sediment this ground can supply, given its cover and steepness",
-  },
-  sourceRisk: {
-    ramp: "plasma",
-    channelOnly: false,
-    label: "Source risk",
-    description: "Erodible AND connected — the places worth fixing",
-  },
-  inChannel: {
-    ramp: "plasma",
-    channelOnly: true,
-    label: "In-channel risk",
-    description: "Sediment concentration the river is actually carrying",
-  },
+/**
+ * Ramp and masking behaviour per layer.
+ *
+ * The layers' names and descriptions are translated text, so they live with
+ * the rest of it (`layer.*` in `i18n/en.ts`), not here in the worker.
+ */
+export const LAYER_STYLE: Record<Exclude<LayerKey, "none">, { ramp: RampName; channelOnly: boolean }> = {
+  connectivity: { ramp: "viridis", channelOnly: false },
+  erosion: { ramp: "magma", channelOnly: false },
+  sourceRisk: { ramp: "plasma", channelOnly: false },
+  inChannel: { ramp: "plasma", channelOnly: true },
 };
 
 /**
