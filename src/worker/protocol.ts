@@ -18,10 +18,15 @@
 
 import type { StretchBounds } from "../core/normalise";
 import type { GridSpec } from "../core/grid";
+import type { ProgressStage } from "../i18n/en";
 import type { LayerKey } from "./overlayPack";
 
-/** Progress reporting matches the signature used across the SCIMAP codebase. */
-export type ProgressCallback = (progress: number, message?: string) => void;
+/**
+ * Progress reporting matches the signature used across the SCIMAP codebase,
+ * except that the message is a key rather than English: the main thread
+ * words it, so the worker never has to load the translations.
+ */
+export type ProgressCallback = (progress: number, stage?: ProgressStage) => void;
 
 /**
  * A storage feature's connectivity break, as capacity rather than as wetness.
@@ -115,7 +120,7 @@ export interface ReachDto {
 
 export type SimResponse =
   | { type: "pong"; jobId: number }
-  | { type: "progress"; jobId: number; progress: number; message?: string }
+  | { type: "progress"; jobId: number; progress: number; stage?: ProgressStage }
   | {
       type: "generated";
       jobId: number;

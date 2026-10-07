@@ -11,6 +11,7 @@
 
 import type { StretchBounds } from "../core/normalise";
 import type { GridSpec } from "../core/grid";
+import { t } from "../i18n";
 import type { LayerKey } from "./overlayPack";
 import type {
   BreakDto,
@@ -153,7 +154,7 @@ export function createSimClient(): SimClient {
     if (!job) return;
 
     if (response.type === "progress") {
-      job.onProgress?.(response.progress, response.message);
+      job.onProgress?.(response.progress, response.stage);
       return;
     }
 
@@ -171,7 +172,7 @@ export function createSimClient(): SimClient {
   worker.onerror = (event: ErrorEvent): void => {
     // A worker-level error has no job id, so every outstanding job is dead —
     // and so is the worker.
-    fail(new Error(event.message || "Simulation worker failed to load"));
+    fail(new Error(event.message || t("boot.workerFailed")));
   };
 
   function send(

@@ -1,7 +1,7 @@
 /**
  * Screenshot the running game.
  *
- * `node tools/shot.mjs [--seed N] [--out path] [--keys m] [--wait ms]`
+ * `node tools/shot.mjs [--seed N] [--out path] [--keys m] [--wait ms] [--lang en|es|de|fr]`
  *
  * The compute core can be checked headlessly against arrays, but the render
  * layer cannot — a curved-world shader that inverts, a toon ramp with the bands
@@ -30,6 +30,8 @@ const seed = flag("seed", "20260809");
 const out = resolve(flag("out", "tools/out/game.png"));
 const keys = flag("keys", "");
 const settle = Number(flag("wait", "1200"));
+// English unless asked, whatever language this machine's Chrome prefers.
+const lang = flag("lang", "en");
 const port = 4173;
 
 mkdirSync(dirname(out), { recursive: true });
@@ -71,7 +73,7 @@ try {
     console.error(`  page exception: ${error.stack ?? error.message}`);
   });
 
-  await page.goto(`http://localhost:${port}/downstream/play/?seed=${seed}`, {
+  await page.goto(`http://localhost:${port}/downstream/play/?seed=${seed}&lang=${lang}`, {
     waitUntil: "load",
   });
 

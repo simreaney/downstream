@@ -19,8 +19,10 @@
 import type { GridSpec } from "../core/grid";
 import { LandCover } from "../scimap/constants";
 import { COVER_COLOURS } from "../render/terrainMaterial";
+import { onLocaleChange, t, type MessageKey } from "../i18n";
 import { LAYER_STYLE, type LayerKey } from "../worker/overlayPack";
-import { rampGradient } from "./overlayLegend";
+import { escapeHtml, kbd, keyLabel } from "./keys";
+import { layerKeyHint, layerText, rampGradient } from "./overlayLegend";
 
 /** Light direction for the hillshade, matching `render/lighting.ts`'s sun. */
 const SUN = normalise(-140, 190, 110);
@@ -113,16 +115,16 @@ const MARKUP = `
   <div class="overview" id="overview" hidden>
     <div class="overview__panel">
       <div class="overview__head">
-        <strong id="overview-title">Catchment overview</strong>
-        <button class="overview__close" id="overview-close" type="button" aria-label="Close">&times;</button>
+        <strong id="overview-title"></strong>
+        <button class="overview__close" id="overview-close" type="button">&times;</button>
       </div>
       <div class="overview__description" id="overview-description"></div>
       <div class="overview__canvas-wrap">
         <canvas id="overview-canvas"></canvas>
         <div class="overview__nodes" id="overview-nodes"></div>
-        <div class="overview__marker overview__marker--outlet" id="overview-outlet" title="Outlet"></div>
-        <div class="overview__marker overview__marker--landmark" id="overview-village" title="Village" hidden>${VILLAGE_ICON}</div>
-        <div class="overview__marker overview__marker--landmark" id="overview-fishery" title="Fishery" hidden>${FISHERY_ICON}</div>
+        <div class="overview__marker overview__marker--outlet" id="overview-outlet"></div>
+        <div class="overview__marker overview__marker--landmark" id="overview-village" hidden>${VILLAGE_ICON}</div>
+        <div class="overview__marker overview__marker--landmark" id="overview-fishery" hidden>${FISHERY_ICON}</div>
         <div class="overview__marker overview__marker--player" id="overview-player">
           <svg viewBox="0 0 10 10" width="16" height="16" overflow="visible">
             <polygon points="5,1 9,9 5,7 1,9" fill="#fff" stroke="#3d3226" stroke-width="0.8" />
@@ -131,14 +133,14 @@ const MARKUP = `
       </div>
       <div class="overview__ramp" id="overview-ramp" hidden></div>
       <div class="overview__key">
-        <span><i class="overview__swatch overview__swatch--wood"></i>wood</span>
-        <span><i class="overview__swatch overview__swatch--stone"></i>stone</span>
-        <span><i class="overview__swatch overview__swatch--spade"></i>spade</span>
-        <span><i class="overview__swatch overview__swatch--outlet"></i>outlet</span>
-        <span><i class="overview__key-icon">${VILLAGE_ICON}</i>village</span>
-        <span><i class="overview__key-icon">${FISHERY_ICON}</i>fishery</span>
+        <span><i class="overview__swatch overview__swatch--wood"></i><span data-key="overview.key.wood"></span></span>
+        <span><i class="overview__swatch overview__swatch--stone"></i><span data-key="overview.key.stone"></span></span>
+        <span><i class="overview__swatch overview__swatch--spade"></i><span data-key="overview.key.spade"></span></span>
+        <span><i class="overview__swatch overview__swatch--outlet"></i><span data-key="overview.key.outlet"></span></span>
+        <span><i class="overview__key-icon">${VILLAGE_ICON}</i><span data-key="overview.key.village"></span></span>
+        <span><i class="overview__key-icon">${FISHERY_ICON}</i><span data-key="overview.key.fishery"></span></span>
       </div>
-      <div class="overview__hint"><kbd>Tab</kbd> close &middot; <kbd>M</kbd> next layer &middot; <kbd>N</kbd> off</div>
+      <div class="overview__hint" id="overview-hint"></div>
     </div>
   </div>
 `;
@@ -267,6 +269,35 @@ export function createOverviewMap(
   const nodeLayer = root.querySelector("#overview-nodes") as HTMLElement;
   const lastPlayer = { x: Number.NaN, z: Number.NaN, yaw: Number.NaN };
   const nodeMarkers = new Map<number, HTMLElement>();
+  let layer: LayerKey = "none";
+
+  const showLayer = (): void => {
+    if (layer === "none") {
+      title.textContent = t("overview.title");
+      description.textContent = t("overview.description");
+      rampEl.hidden = true;
+      return;
+    }
+    const text = layerText(layer);
+    title.textContent = text.label;
+    description.textContent = text.description;
+    rampEl.style.background = rampGradient(LAYER_STYLE[layer].ramp);
+    rampEl.hidden = false;
+  };
+
+  const relabel = (): void => {
+    closeButton.setAttribute("aria-label", t("overview.close"));
+    outletMarker.title = t("overview.outlet");
+    (root.querySelector("#overview-village") as HTMLElement).title = t("overview.village");
+    (root.querySelector("#overview-fishery") as HTMLElement).title = t("overview.fishery");
+    for (const item of panel.querySelectorAll<HTMLElement>("[data-key]")) {
+      item.textContent = t(item.dataset.key as MessageKey);
+    }
+    (root.querySelector("#overview-hint") as HTMLElement).innerHTML =
+      `${kbd(keyLabel("Tab"))} ${escapeHtml(t("hint.close"))} &middot; ${layerKeyHint()}`;
+    showLayer();
+  };
+  const stopLabelling = onLocaleChange(relabel);
 
   const api: OverviewMap = {
     get visible() {
@@ -322,18 +353,9 @@ export function createOverviewMap(
       if (visible) recompose();
     },
 
-    setLayer(layer) {
-      if (layer === "none") {
-        title.textContent = "Catchment overview";
-        description.textContent = "The whole landscape, from above.";
-        rampEl.hidden = true;
-        return;
-      }
-      const style = LAYER_STYLE[layer];
-      title.textContent = style.label;
-      description.textContent = style.description;
-      rampEl.style.background = rampGradient(style.ramp);
-      rampEl.hidden = false;
+    setLayer(next) {
+      layer = next;
+      showLayer();
     },
 
     setPlayer(x, z, yaw) {
@@ -351,6 +373,7 @@ export function createOverviewMap(
     },
 
     dispose() {
+      stopLabelling();
       panel.remove();
     },
   };
@@ -360,6 +383,6 @@ export function createOverviewMap(
     if (event.target === panel) api.hide();
   });
 
-  api.setLayer("none");
+  relabel();
   return api;
 }

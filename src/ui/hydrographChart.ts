@@ -12,27 +12,34 @@
  * and time to peak.
  */
 
+import { formatNumber, onLocaleChange, t } from "../i18n";
 import type { Hydrograph } from "../sim/storm";
 
 const MARKUP = `
   <div class="hydrograph" id="hydrograph" hidden>
     <div class="hydrograph__head">
       <div class="hydrograph__heading">
-        <span id="hydrograph-title">Storm</span>
+        <span id="hydrograph-title"></span>
         <span class="hydrograph__stat" id="hydrograph-stat"></span>
       </div>
-      <button class="hydrograph__close" id="hydrograph-close" type="button" aria-label="Close">&times;</button>
+      <button class="hydrograph__close" id="hydrograph-close" type="button">&times;</button>
     </div>
     <canvas id="hydrograph-canvas" width="440" height="150"></canvas>
     <div class="hydrograph__key">
-      <span><i class="hydrograph__swatch"></i>with your work</span>
-      <span><i class="hydrograph__swatch hydrograph__swatch--dashed"></i>without</span>
+      <span><i class="hydrograph__swatch"></i><span id="hydrograph-with"></span></span>
+      <span><i class="hydrograph__swatch hydrograph__swatch--dashed"></i><span id="hydrograph-without"></span></span>
     </div>
   </div>
 `;
 
+/** The event being plotted, which the title describes. */
+export interface StormEvent {
+  readonly depthMm: number;
+  readonly returnPeriodDays: number;
+}
+
 export interface HydrographChart {
-  show(title: string): void;
+  show(storm: StormEvent): void;
   /** Draw up to `progress` of the way through the run, for live playback. */
   draw(current: Hydrograph, baseline: Hydrograph, stepSeconds: number, progress: number): void;
   hide(): void;
@@ -48,6 +55,10 @@ export function createHydrographChart(root: HTMLElement): HydrographChart {
   const closeButton = root.querySelector("#hydrograph-close") as HTMLButtonElement;
   const canvas = root.querySelector("#hydrograph-canvas") as HTMLCanvasElement;
   const context = canvas.getContext("2d");
+
+  let event: StormEvent | null = null;
+  /** The last frame drawn, so a change of language can redraw its labels. */
+  let lastDraw: Parameters<HydrographChart["draw"]> | null = null;
 
   // Draw at device resolution so the lines are not soft on a retina display.
   const ratio = Math.min(window.devicePixelRatio || 1, 2);
@@ -85,13 +96,24 @@ export function createHydrographChart(root: HTMLElement): HydrographChart {
     ctx.setLineDash([]);
   };
 
+  const showTitle = (): void => {
+    title.textContent = event
+      ? t("chart.title", {
+          depth: formatNumber(event.depthMm),
+          days: formatNumber(Math.round(event.returnPeriodDays)),
+        })
+      : t("chart.storm");
+  };
+
   const api: HydrographChart = {
-    show(text) {
-      title.textContent = text;
+    show(storm) {
+      event = storm;
+      showTitle();
       panel.hidden = false;
     },
 
     draw(current, baseline, stepSeconds, progress) {
+      lastDraw = [current, baseline, stepSeconds, progress];
       if (!context) return;
       const padding = { left: 34, right: 8, top: 8, bottom: 20 };
       const plotWidth = width - padding.left - padding.right;
@@ -113,11 +135,11 @@ export function createHydrographChart(root: HTMLElement): HydrographChart {
       context.fillStyle = "rgba(61,50,38,0.55)";
       context.font = "10px system-ui, sans-serif";
       context.textAlign = "right";
-      context.fillText(peak.toFixed(1), padding.left - 4, padding.top + 8);
+      context.fillText(formatNumber(peak, 1), padding.left - 4, padding.top + 8);
       context.fillText("0", padding.left - 4, padding.top + plotHeight);
       context.textAlign = "center";
       const hours = ((current.q.length - 1) * stepSeconds) / 3600;
-      context.fillText(`${hours.toFixed(0)} h`, padding.left + plotWidth, height - 6);
+      context.fillText(`${formatNumber(hours)} h`, padding.left + plotWidth, height - 6);
       context.textAlign = "left";
       context.fillText("m³/s", padding.left - 30, padding.top - 1);
 
@@ -133,8 +155,10 @@ export function createHydrographChart(root: HTMLElement): HydrographChart {
         const delay = (current.tPeakSeconds - baseline.tPeakSeconds) / 60;
         stat.textContent =
           cut > 0.5
-            ? `peak −${cut.toFixed(0)}%${delay > 1 ? `, ${delay.toFixed(0)} min later` : ""}`
-            : "no measurable change";
+            ? delay > 1
+              ? t("chart.peakCutDelayed", { cut: formatNumber(cut), delay: formatNumber(delay) })
+              : t("chart.peakCut", { cut: formatNumber(cut) })
+            : t("chart.noChange");
       } else {
         stat.textContent = "";
       }
@@ -145,9 +169,20 @@ export function createHydrographChart(root: HTMLElement): HydrographChart {
     },
 
     dispose() {
+      stopLabelling();
       panel.remove();
     },
   };
+
+  const relabel = (): void => {
+    closeButton.setAttribute("aria-label", t("overview.close"));
+    (root.querySelector("#hydrograph-with") as HTMLElement).textContent = t("chart.withWork");
+    (root.querySelector("#hydrograph-without") as HTMLElement).textContent = t("chart.without");
+    showTitle();
+    if (lastDraw) api.draw(...lastDraw);
+  };
+  relabel();
+  const stopLabelling = onLocaleChange(relabel);
 
   closeButton.addEventListener("click", () => api.hide());
 

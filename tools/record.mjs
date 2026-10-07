@@ -165,7 +165,9 @@ async function openGame(code) {
   });
   await page.addInitScript(installProbe);
 
-  await page.goto(`${base}play/?seed=${seed}#s=${code}`, { waitUntil: "load" });
+  // In English whatever this machine's Chrome prefers: the script waits on the
+  // game's own toasts by their wording.
+  await page.goto(`${base}play/?seed=${seed}&lang=en#s=${code}`, { waitUntil: "load" });
   await page.waitForSelector("#boot-status", { state: "hidden", timeout: 90_000 });
   await page.evaluate(() => window.__rec.ready());
 

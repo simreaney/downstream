@@ -17,6 +17,7 @@
 import * as THREE from "three";
 import type { GridSpec } from "../core/grid";
 import { cellAreaM2 } from "../core/grid";
+import { t } from "../i18n";
 import { capacityCells } from "../scimap/twi";
 import type { WorldScene } from "../render/scene";
 import { cellToWorld } from "../render/terrainMesh";
@@ -197,7 +198,7 @@ export function createBuildController(options: BuildOptions): BuildController {
 
       const cost = costOf(kind);
       if (!inventory.spend(cost.wood, cost.stone)) {
-        return { placed: false, message: cost.wood > 0 ? "Not enough wood" : "Not enough stone" };
+        return { placed: false, message: t(cost.wood > 0 ? "placement.needWood" : "placement.needStone") };
       }
 
       const feature: Intervention = { kind, id: nextId++, cell, at };
@@ -224,8 +225,8 @@ export function createBuildController(options: BuildOptions): BuildController {
       return {
         placed: true,
         message: helpful
-          ? `${label(kind)} built — ${formatArea(check.interceptedAreaM2)} draining through`
-          : `${label(kind)} planted — this cover was already lower-risk than woodland`,
+          ? t(`build.built.${kind}`, { area: formatArea(check.interceptedAreaM2) })
+          : t("build.plantedLowRisk"),
       };
     },
 
@@ -245,11 +246,11 @@ export function createBuildController(options: BuildOptions): BuildController {
 
     async undo() {
       const feature = interventions.pop();
-      if (!feature) return { placed: false, message: "Nothing to undo" };
+      if (!feature) return { placed: false, message: t("build.nothingToUndo") };
 
       removeFeature(feature);
       await resolve();
-      return { placed: true, message: `${label(feature.kind)} removed` };
+      return { placed: true, message: t(`build.removed.${feature.kind}`) };
     },
   };
 }
@@ -279,10 +280,6 @@ function damRotation(arrays: MainThreadArrays, spec: GridSpec, cell: number): nu
   const acrossX = -downRow;
   const acrossZ = downCol;
   return Math.atan2(-acrossZ, acrossX);
-}
-
-function label(kind: InterventionKind): string {
-  return kind === "pond" ? "Pond" : kind === "dam" ? "Leaky dam" : "Tree";
 }
 
 

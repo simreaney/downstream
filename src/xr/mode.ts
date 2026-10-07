@@ -17,6 +17,7 @@
 import * as THREE from "three";
 import { isStandaloneHeadset } from "../config";
 import { clamp } from "../core/clamp";
+import { onLocaleChange, t } from "../i18n";
 import type { GameAction, InputState } from "../player/input";
 import type { Renderer } from "../render/renderer";
 import type { WorldScene } from "../render/scene";
@@ -367,7 +368,11 @@ function mountButton(options: XrModeOptions, gl: THREE.WebGLRenderer): void {
   const button = document.createElement("button");
   button.type = "button";
   button.className = "hud__vr";
-  button.textContent = "Enter VR";
+  const relabel = (): void => {
+    button.textContent = t("vr.enter");
+  };
+  relabel();
+  onLocaleChange(relabel);
   button.hidden = true;
   options.buttonHost.append(button);
 
@@ -399,7 +404,7 @@ function mountButton(options: XrModeOptions, gl: THREE.WebGLRenderer): void {
       })
       .catch((error: unknown) => {
         console.error(error);
-        options.notify("The headset could not start a VR session");
+        options.notify(t("toast.vrFailed"));
       })
       .finally(() => {
         button.disabled = false;

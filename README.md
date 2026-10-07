@@ -14,6 +14,10 @@ and screenshots.
 the same world. `?size=small|medium|large` picks how big a catchment to
 generate (defaults to medium, the shipped 1024 m grid).
 
+The game and the project page are in English, Spanish, German and French. They
+open in the browser's preferred language, `?lang=en|es|de|fr` overrides that,
+and the menu under the controls hint switches language mid-game.
+
 ## Controls
 
 | Keyboard / mouse | Gamepad | |
@@ -116,12 +120,35 @@ worker/   owns the canonical arrays; the main thread never sees them
 render/   one terrain mesh, instanced props, toon + curved-world shaders
 game/     interventions, validity, scoring, receptors, save
 xr/       the headset: tabletop rig, controllers, canvas HUD, plinth
+i18n/     the game's text in each language, and the landing page's
 ```
 
 The simulation runs in one Web Worker. The main thread keeps copies of only the
 layers placement validation needs every frame (elevation, slope, curvature,
 contributing area, channel mask, land cover); everything else stays in the
 worker and crosses as transferred buffers.
+
+## Languages
+
+Every string the game shows is in `src/i18n/en.ts`, and `es.ts`, `de.ts` and
+`fr.ts` are typed against it, so a key missing from any language fails
+`npm run typecheck`. `npm test` checks the rest: that each translation keeps
+the English placeholders (`{area}`, `{key}`), and that the landing page's
+tables in `src/i18n/landing/` cover exactly the `data-i18n` keys in
+`index.html`, with the same links, key caps and code spans. The landing page's
+English is the page itself; `src/landing.ts` swaps the rest in.
+
+Key names in hints are never written into a translation. The game binds
+physical keys, so on an AZERTY keyboard the walk keys are printed Z Q S D and the
+risk map is on the comma key. `src/ui/keys.ts` asks the browser what the
+player's layout prints. Chromium can answer, other browsers fall back to
+QWERTY names.
+
+The worker reports loading stages as keys (`stage.*`), not text, so it never
+loads the translations. To add a language, add its code to `Locale` in
+`src/i18n/locale.ts`: the typecheck then lists every table that needs it,
+starting with the message files to copy. `tools/record.mjs` pins the game to English,
+because it waits for toasts by their wording.
 
 ## The model
 

@@ -24,6 +24,10 @@
  * Both planes draw over everything, with no depth test. A hill or a tree crown
  * between the eyes and a readout would otherwise hide the one thing the player
  * needs to read.
+ *
+ * The layout is fixed, and translations run longer than the English it was
+ * drawn around, so text that would not fit is set a little smaller before
+ * anything is cut off (`fitFont`, `fitLines`).
  */
 
 import * as THREE from "three";
@@ -31,6 +35,8 @@ import type { Hud } from "../ui/hud";
 import { costOf, type InterventionKind } from "../game/interventions";
 import type { InventoryState } from "../game/inventory";
 import type { Scores } from "../game/scoring";
+import { onLocaleChange, t, type MessageKey } from "../i18n";
+import { layerText } from "../ui/overlayLegend";
 import { LAYER_STYLE, type LayerKey } from "../worker/overlayPack";
 import { LUTS } from "../worker/ramps";
 
@@ -113,7 +119,12 @@ const DASH_HEIGHT_M = (DASH_WIDTH_M * DASH_H) / DASH_W;
 
 /** Label canvas and physical size: 40 px text about a degree and a quarter tall at the character. */
 const LABEL_W = 1024;
-const LABEL_H = 224;
+/**
+ * Room for the readout and a toast, each on up to two lines. Painted from the
+ * bottom up, so the extra height is empty canvas above them, and a one-line
+ * readout sits exactly where it would on a shorter canvas.
+ */
+const LABEL_H = 320;
 const LABEL_WIDTH_M = 0.4;
 const LABEL_HEIGHT_M = (LABEL_WIDTH_M * LABEL_H) / LABEL_W;
 
@@ -129,21 +140,17 @@ const TREND_SECONDS = 3.2;
 /** Seconds between label repaints while the readout changes every frame as the player walks. */
 const LABEL_MIN_INTERVAL = 0.1;
 
-const TOOLS: { kind: InterventionKind; button: DashboardButton; label: string }[] = [
-  { kind: "tree", button: "toolTree", label: "Plant" },
-  { kind: "dam", button: "toolDam", label: "Leaky dam" },
-  { kind: "pond", button: "toolPond", label: "Pond" },
+const TOOLS: { kind: InterventionKind; button: DashboardButton; label: MessageKey }[] = [
+  { kind: "tree", button: "toolTree", label: "tool.tree" },
+  { kind: "dam", button: "toolDam", label: "tool.dam" },
+  { kind: "pond", button: "toolPond", label: "tool.pond" },
 ];
 
-const BARS: { key: keyof Scores; label: string }[] = [
-  { key: "waterQuality", label: "Water quality" },
-  { key: "floodRisk", label: "Flood risk" },
-  { key: "habitat", label: "Habitat" },
+const BARS: { key: keyof Scores; label: MessageKey }[] = [
+  { key: "waterQuality", label: "score.waterQuality" },
+  { key: "floodRisk", label: "score.floodRisk" },
+  { key: "habitat", label: "score.habitat" },
 ];
-
-const CONTROLS_HINT =
-  "Left stick walk · left trigger run · A or trigger build · B gather · X / Y risk map · " +
-  "grips change tool · right stick turn and zoom";
 
 interface Rect {
   readonly x: number;
@@ -169,12 +176,17 @@ const LAYOUT = {
   skip: { x: DASH_W - PAD - 150, y: 722, w: 150, h: 64 },
 } as const;
 
-const ACTION_LABELS: Record<(typeof LAYOUT.actions)[number]["id"], string> = {
-  storm: "Storm",
-  undo: "Undo",
-  save: "Save",
-  exit: "Exit VR",
+const ACTION_LABELS: Record<(typeof LAYOUT.actions)[number]["id"], MessageKey> = {
+  storm: "vr.storm",
+  undo: "vr.undo",
+  save: "vr.save",
+  exit: "vr.exit",
 };
+
+/** Where a bar's track starts, relative to the row, unless a label needs more room. */
+const BAR_TRACK_X = 230;
+/** Where every bar's track ends, relative to the row; the value sits to its right. */
+const BAR_TRACK_END = 790;
 
 function inside(rect: Rect, x: number, y: number): boolean {
   return x >= rect.x && x <= rect.x + rect.w && y >= rect.y && y <= rect.y + rect.h;
@@ -202,9 +214,10 @@ function card(ctx: CanvasRenderingContext2D, rect: Rect, radius: number, fill: s
   ctx.fill();
 }
 
-/** Greedy word wrap. Returns at most `maxLines`, the last one ellipsised if it had to be cut. */
-function wrap(ctx: CanvasRenderingContext2D, text: string, width: number, maxLines: number): string[] {
-  const words = text.split(/\s+/);
+/** Greedy word wrap, as many lines as it takes. */
+function breakLines(ctx: CanvasRenderingContext2D, text: string, width: number): string[] {
+  // Breaking at ordinary spaces only, so a non-breaking one keeps "12 %" together.
+  const words = text.split(/[ \t\n]+/);
   const lines: string[] = [];
   let line = "";
   for (const word of words) {
@@ -217,12 +230,61 @@ function wrap(ctx: CanvasRenderingContext2D, text: string, width: number, maxLin
     line = word;
   }
   if (line) lines.push(line);
+  return lines;
+}
+
+/** Greedy word wrap. Returns at most `maxLines`, the last one ellipsised if it had to be cut. */
+function wrap(ctx: CanvasRenderingContext2D, text: string, width: number, maxLines: number): string[] {
+  const lines = breakLines(ctx, text, width);
   if (lines.length <= maxLines) return lines;
   const kept = lines.slice(0, maxLines);
   let last = kept[maxLines - 1];
   while (last.length > 1 && ctx.measureText(`${last}…`).width > width) last = last.slice(0, -1);
   kept[maxLines - 1] = `${last.trimEnd()}…`;
   return kept;
+}
+
+/**
+ * Set the largest font from `size` down to `min` px at which `text` fits
+ * `width` on one line, and return the text, ellipsised if even `min` is too big.
+ */
+function fitFont(
+  ctx: CanvasRenderingContext2D,
+  text: string,
+  width: number,
+  weight: number,
+  size: number,
+  min: number,
+): string {
+  for (let px = size; px >= min; px--) {
+    ctx.font = `${weight} ${px}px ${FONT}`;
+    if (ctx.measureText(text).width <= width) return text;
+  }
+  return wrap(ctx, text, width, 1)[0];
+}
+
+/**
+ * Wrap `text` into at most `maxLines`, setting it smaller, down to `min` px,
+ * before cutting any of it. Leaves the font set, and returns the lines with
+ * the line height for the size chosen.
+ */
+function fitLines(
+  ctx: CanvasRenderingContext2D,
+  text: string,
+  width: number,
+  maxLines: number,
+  weight: number,
+  size: number,
+  min: number,
+): { lines: string[]; lineHeight: number } {
+  for (let px = size; px >= min; px--) {
+    ctx.font = `${weight} ${px}px ${FONT}`;
+    const lines = breakLines(ctx, text, width);
+    if (lines.length <= maxLines || px === min) {
+      return { lines: lines.length <= maxLines ? lines : wrap(ctx, text, width, maxLines), lineHeight: Math.round(px * 1.2) };
+    }
+  }
+  return { lines: [], lineHeight: 0 };
 }
 
 function canvasPlane(
@@ -327,22 +389,23 @@ export function createXrHud(): XrHud {
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
     const size = options.size ?? 32;
-    ctx.font = `700 ${size}px ${FONT}`;
+    const room = rect.w - 32;
+    const title = fitFont(ctx, text, room, 700, size, Math.round(size * 0.7));
     const cx = rect.x + rect.w / 2;
     if (options.sub) {
-      ctx.fillText(text, cx, rect.y + rect.h / 2 - 15);
-      ctx.font = `500 24px ${FONT}`;
+      ctx.fillText(title, cx, rect.y + rect.h / 2 - 15);
+      const sub = fitFont(ctx, options.sub, room, 500, 24, 18);
       ctx.fillStyle = active ? "rgba(255,255,255,0.85)" : INK_SOFT;
-      ctx.fillText(options.sub, cx, rect.y + rect.h / 2 + 22);
+      ctx.fillText(sub, cx, rect.y + rect.h / 2 + 22);
     } else {
-      ctx.fillText(text, cx, rect.y + rect.h / 2 + 1);
+      ctx.fillText(title, cx, rect.y + rect.h / 2 + 1);
     }
   };
 
   const paintDashboard = (): void => {
     const ctx = dash.ctx;
     if (!ctx) return;
-    const t = now();
+    const time = now();
     ctx.clearRect(0, 0, DASH_W, DASH_H);
     card(ctx, { x: 4, y: 4, w: DASH_W - 8, h: DASH_H - 12 }, 36, PAPER);
 
@@ -352,9 +415,9 @@ export function createXrHud(): XrHud {
     ctx.textAlign = "left";
     let x = header.x;
     const chips: [string, string, boolean][] = [
-      ["#8a6236", `Wood ${inventory.wood}`, true],
-      ["#9aa3a8", `Stone ${inventory.stone}`, true],
-      ["#e5a12f", inventory.hasSpade ? "Spade" : "No spade", inventory.hasSpade],
+      ["#8a6236", t("vr.wood", { count: inventory.wood }), true],
+      ["#9aa3a8", t("vr.stone", { count: inventory.stone }), true],
+      ["#e5a12f", t(inventory.hasSpade ? "vr.spade" : "vr.noSpade"), inventory.hasSpade],
     ];
     ctx.font = `700 30px ${FONT}`;
     for (const [colour, text, on] of chips) {
@@ -376,27 +439,34 @@ export function createXrHud(): XrHud {
     const overallWidth = ctx.measureText(overall).width;
     ctx.fillStyle = INK;
     ctx.fillText(overall, header.x + header.w, header.y + 34);
-    ctx.font = `600 26px ${FONT}`;
+    // In whatever room the inventory chips have left.
+    const healthRight = header.x + header.w - overallWidth - 16;
+    const health = fitFont(ctx, t("score.title"), healthRight - x - 4, 600, 26, 18);
     ctx.fillStyle = INK_SOFT;
-    ctx.fillText("Catchment health", header.x + header.w - overallWidth - 16, header.y + 34);
+    ctx.fillText(health, healthRight, header.y + 34);
 
     // Tools, with their price.
     TOOLS.forEach((entry, i) => {
       const cost = costOf(entry.kind);
-      const price = cost.wood > 0 ? `${cost.wood} wood` : `${cost.stone} stone`;
-      button(ctx, LAYOUT.tools[i], entry.button, entry.label, { active: tool === entry.kind, sub: price });
+      const price =
+        cost.wood > 0 ? t("vr.priceWood", { count: cost.wood }) : t("vr.priceStone", { count: cost.stone });
+      button(ctx, LAYOUT.tools[i], entry.button, t(entry.label), { active: tool === entry.kind, sub: price });
     });
 
-    // Health bars.
+    // Health bars. The tracks start together, after the longest label, so a
+    // long translation shortens all three bars rather than overprinting one.
+    ctx.font = `600 27px ${FONT}`;
+    let labelWidth = 0;
+    for (const bar of BARS) labelWidth = Math.max(labelWidth, ctx.measureText(t(bar.label)).width);
+    const trackX = Math.min(Math.max(BAR_TRACK_X, labelWidth + 24), BAR_TRACK_END - 360);
     BARS.forEach((bar, i) => {
       const rect = LAYOUT.bars[i];
       const value = scores ? scores[bar.key] : 0;
       const mid = rect.y + rect.h / 2;
       ctx.textAlign = "left";
-      ctx.font = `600 27px ${FONT}`;
       ctx.fillStyle = INK;
-      ctx.fillText(bar.label, rect.x, mid);
-      const track = { x: rect.x + 230, y: mid - 9, w: 560, h: 18 };
+      ctx.fillText(fitFont(ctx, t(bar.label), trackX - 24, 600, 27, 19), rect.x, mid);
+      const track = { x: rect.x + trackX, y: mid - 9, w: BAR_TRACK_END - trackX, h: 18 };
       ctx.fillStyle = TRACK;
       roundedRect(ctx, track, 9);
       ctx.fill();
@@ -407,7 +477,7 @@ export function createXrHud(): XrHud {
       ctx.font = `700 27px ${FONT}`;
       ctx.fillText(String(Math.round(value)), rect.x + 870, mid);
       const trend = trends.get(bar.key);
-      if (trend && trend.until > t) {
+      if (trend && trend.until > time) {
         ctx.textAlign = "left";
         ctx.fillStyle = trend.up ? ACCENT_DEEP : DANGER;
         ctx.fillText(trend.up ? "▲" : "▼", rect.x + 890, mid);
@@ -416,17 +486,20 @@ export function createXrHud(): XrHud {
 
     // Risk map: which layer, and its legend.
     const style = layer === "none" ? null : LAYER_STYLE[layer];
-    const on = style !== null;
-    button(ctx, LAYOUT.layerNext, "overlayNext", style ? `Risk map: ${style.label}  ›` : "Show the risk map", {
-      active: on,
-    });
-    button(ctx, LAYOUT.layerOff, "overlayOff", "Hide map");
-    if (style) {
+    const text = layer === "none" ? null : layerText(layer);
+    button(
+      ctx,
+      LAYOUT.layerNext,
+      "overlayNext",
+      text ? `${t("vr.riskMap", { layer: text.label })}  ›` : t("vr.showRiskMap"),
+      { active: text !== null },
+    );
+    button(ctx, LAYOUT.layerOff, "overlayOff", t("vr.hideMap"));
+    if (style && text) {
       const { legend } = LAYOUT;
       ctx.textAlign = "left";
-      ctx.font = `500 25px ${FONT}`;
       ctx.fillStyle = INK_SOFT;
-      ctx.fillText(wrap(ctx, style.description, legend.w, 1)[0], legend.x, legend.y + 18);
+      ctx.fillText(fitFont(ctx, text.description, legend.w, 500, 25, 20), legend.x, legend.y + 18);
       const ramp = { x: legend.x, y: legend.y + 42, w: legend.w - 250, h: 22 };
       const lut = LUTS[style.ramp];
       const gradient = ctx.createLinearGradient(ramp.x, 0, ramp.x + ramp.w, 0);
@@ -437,15 +510,17 @@ export function createXrHud(): XrHud {
       ctx.fillStyle = gradient;
       roundedRect(ctx, ramp, 11);
       ctx.fill();
-      ctx.font = `600 23px ${FONT}`;
+      // Both ends share the room after the ramp, at one size.
+      const ends = `${t("legend.lower")}    ${t("legend.higher")}`;
+      fitFont(ctx, ends, legend.x + legend.w - (ramp.x + ramp.w + 18), 600, 23, 16);
       ctx.fillStyle = INK_SOFT;
       ctx.textAlign = "left";
-      ctx.fillText("lower", ramp.x + ramp.w + 18, ramp.y + 12);
+      ctx.fillText(t("legend.lower"), ramp.x + ramp.w + 18, ramp.y + 12);
       ctx.textAlign = "right";
-      ctx.fillText("higher", legend.x + legend.w, ramp.y + 12);
+      ctx.fillText(t("legend.higher"), legend.x + legend.w, ramp.y + 12);
     }
 
-    for (const { id, rect } of LAYOUT.actions) button(ctx, rect, id, ACTION_LABELS[id]);
+    for (const { id, rect } of LAYOUT.actions) button(ctx, rect, id, t(ACTION_LABELS[id]));
 
     // Tutorial step, or a reminder of the controls once it is done.
     const { tutorial: box } = LAYOUT;
@@ -453,15 +528,17 @@ export function createXrHud(): XrHud {
     ctx.textAlign = "left";
     ctx.fillStyle = INK;
     if (tutorial) {
-      ctx.font = `500 25px ${FONT}`;
-      const lines = wrap(ctx, tutorial, box.w - LAYOUT.skip.w - 56, 3);
-      lines.forEach((line, i) => ctx.fillText(line, box.x + 22, box.y + 50 + (i - (lines.length - 1) / 2) * 30));
-      button(ctx, LAYOUT.skip, "skipTutorial", "Skip", { size: 26 });
+      const { lines, lineHeight } = fitLines(ctx, tutorial, box.w - LAYOUT.skip.w - 56, 3, 500, 25, 21);
+      lines.forEach((line, i) =>
+        ctx.fillText(line, box.x + 22, box.y + 50 + (i - (lines.length - 1) / 2) * lineHeight),
+      );
+      button(ctx, LAYOUT.skip, "skipTutorial", t("tutorial.skip"), { size: 26 });
     } else {
-      ctx.font = `500 23px ${FONT}`;
       ctx.fillStyle = INK_SOFT;
-      const lines = wrap(ctx, CONTROLS_HINT, box.w - 44, 3);
-      lines.forEach((line, i) => ctx.fillText(line, box.x + 22, box.y + 50 + (i - (lines.length - 1) / 2) * 28));
+      const { lines, lineHeight } = fitLines(ctx, t("vr.controls"), box.w - 44, 3, 500, 23, 19);
+      lines.forEach((line, i) =>
+        ctx.fillText(line, box.x + 22, box.y + 50 + (i - (lines.length - 1) / 2) * lineHeight),
+      );
     }
 
     dash.texture.needsUpdate = true;
@@ -485,27 +562,39 @@ export function createXrHud(): XrHud {
     ctx.clearRect(0, 0, LABEL_W, LABEL_H);
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
-    ctx.font = `700 40px ${FONT}`;
 
-    const pill = (text: string, y: number, fill: string, colour: string): void => {
-      const line = wrap(ctx, text, LABEL_W - 120, 1)[0];
-      const width = Math.min(LABEL_W - 16, ctx.measureText(line).width + 64);
-      card(ctx, { x: (LABEL_W - width) / 2, y, w: width, h: 88 }, 44, fill);
+    /**
+     * A message on one line, or two rather than losing its end: a refusal's
+     * reason comes last ("…would wash out"), and translations run longer
+     * than the English. Returns the pill's top, for stacking the next above.
+     */
+    const pill = (text: string, bottom: number, fill: string, colour: string): number => {
+      const { lines, lineHeight } = fitLines(ctx, text, LABEL_W - 120, 2, 700, 40, 32);
+      let widest = 0;
+      for (const line of lines) widest = Math.max(widest, ctx.measureText(line).width);
+      const width = Math.min(LABEL_W - 16, widest + 64);
+      const height = 88 + (lines.length - 1) * lineHeight;
+      const top = bottom - height;
+      card(ctx, { x: (LABEL_W - width) / 2, y: top, w: width, h: height }, 44, fill);
       ctx.fillStyle = colour;
-      ctx.fillText(line, LABEL_W / 2, y + 45);
+      lines.forEach((line, i) =>
+        ctx.fillText(line, LABEL_W / 2, top + height / 2 + 1 + (i - (lines.length - 1) / 2) * lineHeight),
+      );
+      return top;
     };
 
     const toastLive = toastText !== "" && toastUntil > now();
     // Bottom row first, so a lone line sits just over the character's head.
-    const bottom = LABEL_H - 100;
+    const bottom = LABEL_H - 12;
     if (controllersMissing) {
-      pill("Pick up your controllers to play", bottom, INK, PAPER);
+      pill(t("vr.pickUpControllers"), bottom, INK, PAPER);
     } else {
+      let next = bottom;
       if (readout.message) {
         const colour = !readout.ok ? DANGER : readout.warn ? WARN : ACCENT_DEEP;
-        pill(readout.message, bottom, PAPER, colour);
+        next = pill(readout.message, bottom, PAPER, colour) - 32;
       }
-      if (toastLive) pill(toastText, readout.message ? 4 : bottom, INK, PAPER);
+      if (toastLive) pill(toastText, next, INK, PAPER);
     }
 
     tag.mesh.visible = controllersMissing || toastLive || readout.message !== "";
@@ -529,6 +618,14 @@ export function createXrHud(): XrHud {
     hovered = next;
     dashDirty = true;
   };
+
+  // Both planes are mostly words. The readout is re-sent every frame anyway;
+  // this repaints the rest in the new language.
+  const stopLabelling = onLocaleChange(() => {
+    dashDirty = true;
+    labelDirty = true;
+    labelPaintedAt = -Infinity;
+  });
 
   return {
     dashboard: dash.mesh,
@@ -559,15 +656,15 @@ export function createXrHud(): XrHud {
     },
 
     setScores(next) {
-      const t = now();
+      const time = now();
       for (const bar of BARS) {
         const value = next[bar.key];
         const was = previous.get(bar.key);
         // Same threshold as the page: below a tenth of a point the rounded
         // number cannot show the change the arrow would point at.
         if (was !== undefined && Math.abs(value - was) > 0.1) {
-          trends.set(bar.key, { up: value > was, until: t + TREND_SECONDS });
-          dashExpiry = Math.min(dashExpiry, t + TREND_SECONDS);
+          trends.set(bar.key, { up: value > was, until: time + TREND_SECONDS });
+          dashExpiry = Math.min(dashExpiry, time + TREND_SECONDS);
         }
         previous.set(bar.key, value);
       }
@@ -661,10 +758,10 @@ export function createXrHud(): XrHud {
     },
 
     update() {
-      const t = now();
-      if (t >= dashExpiry) {
+      const time = now();
+      if (time >= dashExpiry) {
         dashExpiry = Infinity;
-        for (const trend of trends.values()) if (trend.until > t) dashExpiry = Math.min(dashExpiry, trend.until);
+        for (const trend of trends.values()) if (trend.until > time) dashExpiry = Math.min(dashExpiry, trend.until);
         dashDirty = true;
       }
       if (dashDirty) {
@@ -672,19 +769,20 @@ export function createXrHud(): XrHud {
         paintDashboard();
       }
 
-      if (toastText && toastUntil <= t) {
+      if (toastText && toastUntil <= time) {
         toastText = "";
         labelDirty = true;
         labelPaintedAt = -Infinity;
       }
-      if (labelDirty && t - labelPaintedAt >= LABEL_MIN_INTERVAL) {
+      if (labelDirty && time - labelPaintedAt >= LABEL_MIN_INTERVAL) {
         labelDirty = false;
-        labelPaintedAt = t;
+        labelPaintedAt = time;
         paintLabel();
       }
     },
 
     dispose() {
+      stopLabelling();
       for (const plane of [dash, tag]) {
         plane.texture.dispose();
         plane.mesh.geometry.dispose();

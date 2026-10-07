@@ -12,6 +12,9 @@
  * planting comes last, once the player has somewhere informed to put a tree.
  */
 
+import { onLocaleChange, t } from "../i18n";
+import { keyLabel, keyLabels } from "./keys";
+
 export type TutorialGoal =
   | "walk"
   | "openMap"
@@ -22,43 +25,43 @@ export type TutorialGoal =
 
 interface Step {
   readonly goal: TutorialGoal;
-  readonly text: string;
+  readonly text: () => string;
   /** The same step, with the controls named for a headset's controllers. */
-  readonly vrText: string;
+  readonly vrText: () => string;
 }
 
 const STEPS: Step[] = [
   {
     goal: "walk",
-    text: "This catchment is losing soil to its river. Walk about with WASD and take a look.",
-    vrText: "This catchment is losing soil to its river. Walk about with the left stick and take a look.",
+    text: () => t("tutorial.walk", { keys: keyLabels("KeyW", "KeyA", "KeyS", "KeyD") }),
+    vrText: () => t("tutorial.walkVr"),
   },
   {
     goal: "openMap",
-    text: "Press M for the risk map. Bright means erodible ground that is well connected to a watercourse — that is where sediment comes from.",
-    vrText: "Press X for the risk map. Bright means erodible ground that is well connected to a watercourse — that is where sediment comes from.",
+    text: () => t("tutorial.openMap", { key: keyLabel("KeyM") }),
+    vrText: () => t("tutorial.openMap", { key: "X" }),
   },
   {
     goal: "gather",
-    text: "Press E by a log pile or boulder to gather. You will need wood to plant and stone to dig.",
-    vrText: "Press B by a log pile or boulder to gather. You will need wood to plant and stone to dig.",
+    text: () => t("tutorial.gather", { key: keyLabel("KeyE") }),
+    vrText: () => t("tutorial.gather", { key: "B" }),
   },
   {
     goal: "plant",
-    text: "Face a bright patch near the river and press F to plant. Watch the map and the water.",
-    vrText: "Face a bright patch near the river and press A to plant. Watch the map and the water.",
+    text: () => t("tutorial.plant", { key: keyLabel("KeyF") }),
+    vrText: () => t("tutorial.plant", { key: "A" }),
   },
   {
     goal: "storm",
-    text: "Trees are only half of it. Press R to send a storm through and see what your work does to the flood.",
-    vrText: "Trees are only half of it. Point at Storm on this panel and pull the trigger to see what your work does to the flood.",
+    text: () => t("tutorial.storm", { key: keyLabel("KeyR") }),
+    vrText: () => t("tutorial.stormVr"),
   },
 ];
 
 const MARKUP = `
   <div class="tutorial" id="tutorial" hidden>
     <p id="tutorial-text"></p>
-    <button id="tutorial-skip" type="button">Skip</button>
+    <button id="tutorial-skip" type="button"></button>
   </div>
 `;
 
@@ -81,13 +84,21 @@ export function createTutorial(root: HTMLElement, skip: boolean): Tutorial {
   const skipButton = root.querySelector("#tutorial-skip") as HTMLButtonElement;
 
   let index = skip ? STEPS.length : 0;
+  /**
+   * The step on show, worded for the current language. Kept rather than built
+   * on each read, because the headset asks for it every frame.
+   */
+  let current: { readonly text: string; readonly vrText: string } | null = null;
 
   const render = (): void => {
+    skipButton.textContent = t("tutorial.skip");
     if (index >= STEPS.length) {
+      current = null;
       panel.hidden = true;
       return;
     }
-    text.textContent = STEPS[index].text;
+    current = { text: STEPS[index].text(), vrText: STEPS[index].vrText() };
+    text.textContent = current.text;
     panel.hidden = false;
   };
 
@@ -98,6 +109,7 @@ export function createTutorial(root: HTMLElement, skip: boolean): Tutorial {
   skipButton.addEventListener("click", dismiss);
 
   render();
+  const stopLabelling = onLocaleChange(render);
 
   return {
     get finished() {
@@ -105,7 +117,7 @@ export function createTutorial(root: HTMLElement, skip: boolean): Tutorial {
     },
 
     get current() {
-      return index < STEPS.length ? STEPS[index] : null;
+      return current;
     },
 
     skip: dismiss,
@@ -121,6 +133,7 @@ export function createTutorial(root: HTMLElement, skip: boolean): Tutorial {
     },
 
     dispose() {
+      stopLabelling();
       panel.remove();
     },
   };

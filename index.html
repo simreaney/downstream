@@ -3,9 +3,10 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-    <title>Downstream — a diffuse pollution game</title>
+    <title data-i18n="meta.title">Downstream — a diffuse pollution game</title>
     <meta
       name="description"
+      data-i18n-content="meta.description"
       content="Walk a procedurally generated river catchment and repair it with leaky dams, ponds and riparian trees, guided by SCIMAP, a diffuse-pollution risk model running live in your browser."
     />
     <meta property="og:type" content="website" />
@@ -233,6 +234,21 @@
       }
       .hero__content {
         padding-block: 120px 56px;
+      }
+      /* The language menu, top right over the loop. */
+      .language {
+        position: absolute;
+        top: 16px;
+        right: 16px;
+        z-index: 1;
+        padding: 8px 14px;
+        border: 0;
+        border-radius: 999px;
+        background: var(--card);
+        color: var(--ink);
+        box-shadow: var(--shadow);
+        font: 600 0.9rem var(--body);
+        cursor: pointer;
       }
       .hero h1 {
         font-size: clamp(3.2rem, 9vw, 6.5rem);
@@ -559,8 +575,8 @@
       ></video>
       <div class="wrap hero__content">
         <h1>Downstream</h1>
-        <p class="hero__tagline">A diffuse pollution game</p>
-        <p class="hero__pitch">
+        <p data-i18n="hero.tagline" class="hero__tagline">A diffuse pollution game</p>
+        <p data-i18n="hero.pitch" class="hero__pitch">
           Walk a procedurally generated river catchment and repair it: plant riparian trees, dig
           ponds and build leaky wooden dams. The risk map you work from isn’t decoration. It’s
           SCIMAP, a real diffuse-pollution model, re-solving on the terrain every time you build.
@@ -568,11 +584,11 @@
         <div class="hero__actions">
           <a class="button button--primary" href="play/">
             <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M8 5.5v13a1 1 0 0 0 1.5.86l10.4-6.5a1 1 0 0 0 0-1.72L9.5 4.64A1 1 0 0 0 8 5.5Z" /></svg>
-            Play in your browser
+            <span data-i18n="hero.play">Play in your browser</span>
           </a>
-          <a class="button button--quiet" href="#trailer">Watch the trailer</a>
+          <a data-i18n="hero.trailer" class="button button--quiet" href="#trailer">Watch the trailer</a>
         </div>
-        <p class="hero__note">
+        <p data-i18n="hero.note" class="hero__note">
           Free, in the browser, nothing to install. Works with a keyboard and mouse or any game
           controller, and <a href="#vr">in VR on a Meta Quest</a>.
         </p>
@@ -583,8 +599,8 @@
       <section id="trailer">
         <div class="wrap">
           <div class="section-head">
-            <p class="eyebrow">Trailer</p>
-            <h2>See it in motion</h2>
+            <p data-i18n="trailer.eyebrow" class="eyebrow">Trailer</p>
+            <h2 data-i18n="trailer.title">See it in motion</h2>
           </div>
           <figure class="trailer" style="margin: 0">
             <div class="frame">
@@ -593,13 +609,13 @@
                 playsinline
                 preload="metadata"
                 poster="/media/trailer-poster.jpg"
-                aria-label="Downstream gameplay trailer"
+                data-i18n-aria-label="trailer.label" aria-label="Downstream gameplay trailer"
               >
                 <source src="/media/trailer.mp4" type="video/mp4" />
-                <a href="media/trailer.mp4">Download the trailer (MP4)</a>
+                <a data-i18n="trailer.download" href="media/trailer.mp4">Download the trailer (MP4)</a>
               </video>
             </div>
-            <figcaption>
+            <figcaption data-i18n="trailer.caption">
               A walk down to a tributary: the risk map, a leaky dam, a riparian buffer and an offline
               pond, then a 1-in-30 design storm through a catchment that’s partway through repair.
               Recorded from the browser build, no sound.
@@ -611,9 +627,9 @@
       <section id="how" class="band">
         <div class="wrap">
           <div class="section-head">
-            <p class="eyebrow">How it plays</p>
-            <h2>Read the land, then change it</h2>
-            <p>
+            <p data-i18n="how.eyebrow" class="eyebrow">How it plays</p>
+            <h2 data-i18n="how.title">Read the land, then change it</h2>
+            <p data-i18n="how.intro">
               Each catchment is generated from a seed: ridges, valleys, a river network, fields,
               woods, a village and a fishery downstream. It’s losing soil to its river, and you have
               three tools to fix that.
@@ -622,14 +638,14 @@
 
           <div class="features">
             <article class="feature">
-              <a class="feature__shot frame" href="media/risk.jpg" data-caption="The source-risk layer of the SCIMAP map">
-                <img src="/media/risk-960.jpg" srcset="/media/risk-960.jpg 960w, /media/risk.jpg 1920w" sizes="(max-width: 860px) 100vw, 640px" width="1920" height="1080" loading="lazy" alt="The village and its streams under the source-risk overlay: purple where risk is low, bright yellow and orange where erodible ground is connected to the water." />
+              <a class="feature__shot frame" href="media/risk.jpg" data-i18n-caption="how.map.caption" data-caption="The source-risk layer of the SCIMAP map">
+                <img src="/media/risk-960.jpg" srcset="/media/risk-960.jpg 960w, /media/risk.jpg 1920w" sizes="(max-width: 860px) 100vw, 640px" width="1920" height="1080" loading="lazy" data-i18n-alt="how.map.alt" alt="The village and its streams under the source-risk overlay: purple where risk is low, bright yellow and orange where erodible ground is connected to the water." />
               </a>
               <div>
-                <p class="feature__step">1 · The map</p>
-                <h3>Find where the sediment comes from</h3>
-                <p>
-                  Press <kbd>M</kbd> for the risk map. Bright ground is both erodible <em>and</em>
+                <p data-i18n="how.map.step" class="feature__step">1 · The map</p>
+                <h3 data-i18n="how.map.title">Find where the sediment comes from</h3>
+                <p data-i18n="how.map.body">
+                  Press <kbd data-key="KeyM">M</kbd> for the risk map. Bright ground is both erodible <em>and</em>
                   connected to a watercourse, and that’s where sediment reaches the river. Cycle
                   through source risk, connectivity, erosion and in-channel risk to see why.
                 </p>
@@ -637,30 +653,30 @@
             </article>
 
             <article class="feature">
-              <a class="feature__shot frame" href="media/dam.jpg" data-caption="Lining up a leaky dam on a headwater stream">
-                <img src="/media/dam-960.jpg" srcset="/media/dam-960.jpg 960w, /media/dam.jpg 1920w" sizes="(max-width: 860px) 100vw, 640px" width="1920" height="1080" loading="lazy" alt="The player standing in a small stream, lining up a leaky dam. The readout above says how much land drains through the spot." />
+              <a class="feature__shot frame" href="media/dam.jpg" data-i18n-caption="how.build.caption" data-caption="Lining up a leaky dam on a headwater stream">
+                <img src="/media/dam-960.jpg" srcset="/media/dam-960.jpg 960w, /media/dam.jpg 1920w" sizes="(max-width: 860px) 100vw, 640px" width="1920" height="1080" loading="lazy" data-i18n-alt="how.build.alt" alt="The player standing in a small stream, lining up a leaky dam. The readout above says how much land drains through the spot." />
               </a>
               <div>
-                <p class="feature__step">2 · Build</p>
-                <h3>Put each fix where it counts</h3>
-                <p>
+                <p data-i18n="how.build.step" class="feature__step">2 · Build</p>
+                <h3 data-i18n="how.build.title">Put each fix where it counts</h3>
+                <p data-i18n="how.build.body">
                   Leaky dams go in small headwater streams, ponds in hollows off the channel, and
                   trees on the bright ground beside the water. Before you commit, the readout tells
                   you how much land drains through the spot. If the answer is “almost nothing”, it
                   says so.
                 </p>
-                <p>Gather wood and stone as you go, and find the spade before you can dig.</p>
+                <p data-i18n="how.build.body2">Gather wood and stone as you go, and find the spade before you can dig.</p>
               </div>
             </article>
 
             <article class="feature">
-              <a class="feature__shot frame" href="media/trees.jpg" data-caption="Planting a riparian buffer beside the stream">
-                <img src="/media/trees-960.jpg" srcset="/media/trees-960.jpg 960w, /media/trees.jpg 1920w" sizes="(max-width: 860px) 100vw, 640px" width="1920" height="1080" loading="lazy" alt="Young trees planted on a stream bank, with the next planting spot highlighted." />
+              <a class="feature__shot frame" href="media/trees.jpg" data-i18n-caption="how.respond.caption" data-caption="Planting a riparian buffer beside the stream">
+                <img src="/media/trees-960.jpg" srcset="/media/trees-960.jpg 960w, /media/trees.jpg 1920w" sizes="(max-width: 860px) 100vw, 640px" width="1920" height="1080" loading="lazy" data-i18n-alt="how.respond.alt" alt="Young trees planted on a stream bank, with the next planting spot highlighted." />
               </a>
               <div>
-                <p class="feature__step">3 · Watch it respond</p>
-                <h3>Upstream work shows up downstream</h3>
-                <p>
+                <p data-i18n="how.respond.step" class="feature__step">3 · Watch it respond</p>
+                <h3 data-i18n="how.respond.title">Upstream work shows up downstream</h3>
+                <p data-i18n="how.respond.body">
                   Every tree, pond and dam re-runs the model, so the map and the colour of the river
                   change the moment you build. It doesn’t flatter you, either: under the model’s
                   land-cover weights, planting trees on rough grazing makes erosion slightly worse.
@@ -670,14 +686,14 @@
             </article>
 
             <article class="feature">
-              <a class="feature__shot frame" href="media/result.jpg" data-caption="The flood hydrograph after a 1-in-30 design storm">
-                <img src="/media/result-960.jpg" srcset="/media/result-960.jpg 960w, /media/result.jpg 1920w" sizes="(max-width: 860px) 100vw, 640px" width="1920" height="1080" loading="lazy" alt="After a storm: a hydrograph comparing river flow with and without the player's work, and a message reporting the cut in peak flow." />
+              <a class="feature__shot frame" href="media/result.jpg" data-i18n-caption="how.test.caption" data-caption="The flood hydrograph after a 1-in-30 design storm">
+                <img src="/media/result-960.jpg" srcset="/media/result-960.jpg 960w, /media/result.jpg 1920w" sizes="(max-width: 860px) 100vw, 640px" width="1920" height="1080" loading="lazy" data-i18n-alt="how.test.alt" alt="After a storm: a hydrograph comparing river flow with and without the player's work, and a message reporting the cut in peak flow." />
               </a>
               <div>
-                <p class="feature__step">4 · Test it</p>
-                <h3>Send a storm through</h3>
-                <p>
-                  Press <kbd>R</kbd> to run a 1-in-30 design storm. The hydrograph plots the flood
+                <p data-i18n="how.test.step" class="feature__step">4 · Test it</p>
+                <h3 data-i18n="how.test.title">Send a storm through</h3>
+                <p data-i18n="how.test.body">
+                  Press <kbd data-key="KeyR">R</kbd> to run a 1-in-30 design storm. The hydrograph plots the flood
                   peak with your work against the same storm without it, and the village and the
                   fishery respond to the difference. Smaller storms arrive on their own, too.
                 </p>
@@ -685,13 +701,13 @@
             </article>
 
             <article class="feature">
-              <a class="feature__shot frame" href="media/map.jpg" data-caption="The catchment overview map">
-                <img src="/media/map-960.jpg" srcset="/media/map-960.jpg 960w, /media/map.jpg 1920w" sizes="(max-width: 860px) 100vw, 640px" width="1920" height="1080" loading="lazy" alt="The catchment overview map: a shaded relief of the whole landscape with the stream network, the village, the fishery and resource markers." />
+              <a class="feature__shot frame" href="media/map.jpg" data-i18n-caption="how.plan.caption" data-caption="The catchment overview map">
+                <img src="/media/map-960.jpg" srcset="/media/map-960.jpg 960w, /media/map.jpg 1920w" sizes="(max-width: 860px) 100vw, 640px" width="1920" height="1080" loading="lazy" data-i18n-alt="how.plan.alt" alt="The catchment overview map: a shaded relief of the whole landscape with the stream network, the village, the fishery and resource markers." />
               </a>
               <div>
-                <p class="feature__step">5 · Plan</p>
-                <h3>See the whole catchment</h3>
-                <p>
+                <p data-i18n="how.plan.step" class="feature__step">5 · Plan</p>
+                <h3 data-i18n="how.plan.title">See the whole catchment</h3>
+                <p data-i18n="how.plan.body">
                   <kbd>Tab</kbd> opens the overview: the drainage network from the ridges to the
                   outlet, the village and the fishery, and where to find wood, stone and the spade.
                   The risk layers show here too.
@@ -705,9 +721,9 @@
       <section id="science">
         <div class="wrap">
           <div class="section-head">
-            <p class="eyebrow">The model</p>
-            <h2>A real risk map, not a decorative one</h2>
-            <p>
+            <p data-i18n="science.eyebrow" class="eyebrow">The model</p>
+            <h2 data-i18n="science.title">A real risk map, not a decorative one</h2>
+            <p data-i18n="science.intro">
               SCIMAP maps where diffuse pollution is likely to come from by combining two things:
               how erodible the land is, and how well each point is connected to the river when the
               ground is wet. Downstream runs it live, in a Web Worker, on the terrain you’re walking
@@ -716,30 +732,30 @@
           </div>
           <div class="science">
             <div class="card">
-              <h3>Faithful where it’s specified</h3>
-              <p>
+              <h3 data-i18n="science.faithful.title">Faithful where it’s specified</h3>
+              <p data-i18n="science.faithful.body">
                 The wetness index, the Network Index, FD8 flow routing and the percentile stretch
                 are transcribed from the reference implementation, with the formulas kept verbatim.
               </p>
             </div>
             <div class="card">
-              <h3>Honest where it departs</h3>
-              <p>
+              <h3 data-i18n="science.honest.title">Honest where it departs</h3>
+              <p data-i18n="science.honest.body">
                 There are three deliberate changes: a single-sweep Network Index, in-channel risk
                 accumulated along the flow path, and stretch bounds frozen at the start so that
                 improvement shows as improvement. Each one is argued in the code.
               </p>
             </div>
             <div class="card">
-              <h3>A save is a link</h3>
-              <p>
+              <h3 data-i18n="science.save.title">A save is a link</h3>
+              <p data-i18n="science.save.body">
                 Generation is exactly reproducible, so a save is just a seed and a list of what you
-                built. That’s a few hundred bytes. Press <kbd>K</kbd> to copy a link that rebuilds
+                built. That’s a few hundred bytes. Press <kbd data-key="KeyK">K</kbd> to copy a link that rebuilds
                 your catchment for anyone.
               </p>
             </div>
           </div>
-          <p class="science__more">
+          <p data-i18n="science.more" class="science__more">
             The reasoning, and the bugs that looked plausible while being wrong, are written up in
             <a href="https://github.com/simreaney/downstream/blob/main/DESIGN.md">DESIGN.md</a>.
             More on SCIMAP itself is on the
@@ -752,45 +768,47 @@
         <div class="wrap controls">
           <div>
             <div class="section-head" style="margin-bottom: 24px">
-              <p class="eyebrow">Controls</p>
-              <h2>Keyboard or gamepad</h2>
+              <p data-i18n="controls.eyebrow" class="eyebrow">Controls</p>
+              <h2 data-i18n="controls.title">Keyboard or gamepad</h2>
             </div>
             <div class="table-scroll">
               <table>
                 <thead>
-                  <tr><th scope="col">Keys</th><th scope="col">Gamepad</th><th scope="col">Does</th></tr>
+                  <tr><th scope="col" data-i18n="controls.keys">Keys</th><th scope="col" data-i18n="controls.gamepad">Gamepad</th><th scope="col" data-i18n="controls.does">Does</th></tr>
                 </thead>
                 <tbody>
-                  <tr><td><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd></td><td>Left stick</td><td>Walk (<kbd>Shift</kbd> to run); drag or right stick to look</td></tr>
-                  <tr><td><kbd>1</kbd> <kbd>2</kbd> <kbd>3</kbd></td><td>D-pad</td><td>Plant, leaky dam, pond</td></tr>
-                  <tr><td><kbd>F</kbd></td><td>A</td><td>Build where you’re facing</td></tr>
-                  <tr><td><kbd>E</kbd></td><td>B</td><td>Gather wood, stone or the spade</td></tr>
-                  <tr><td><kbd>M</kbd> / <kbd>N</kbd></td><td>X / Back</td><td>Next risk layer / overlay off</td></tr>
-                  <tr><td><kbd>Tab</kbd></td><td>Y</td><td>Catchment overview map</td></tr>
-                  <tr><td><kbd>R</kbd></td><td>RT</td><td>Run a 1-in-30 design storm</td></tr>
-                  <tr><td><kbd>Z</kbd></td><td>D-pad left</td><td>Undo the last feature</td></tr>
-                  <tr><td><kbd>K</kbd></td><td>Start</td><td>Save, and copy a share link</td></tr>
+                  <tr><td><kbd data-key="KeyW">W</kbd><kbd data-key="KeyA">A</kbd><kbd data-key="KeyS">S</kbd><kbd data-key="KeyD">D</kbd></td><td data-i18n="controls.walk.pad">Left stick</td><td data-i18n="controls.walk">Walk (<kbd>Shift</kbd> to run); drag or right stick to look</td></tr>
+                  <tr><td><kbd>1</kbd> <kbd>2</kbd> <kbd>3</kbd></td><td data-i18n="controls.tools.pad">D-pad</td><td data-i18n="controls.tools">Plant, leaky dam, pond</td></tr>
+                  <tr><td><kbd data-key="KeyF">F</kbd></td><td>A</td><td data-i18n="controls.build">Build where you’re facing</td></tr>
+                  <tr><td><kbd data-key="KeyE">E</kbd></td><td>B</td><td data-i18n="controls.gather">Gather wood, stone or the spade</td></tr>
+                  <tr><td><kbd data-key="KeyM">M</kbd> / <kbd data-key="KeyN">N</kbd></td><td>X / Back</td><td data-i18n="controls.overlay">Next risk layer / overlay off</td></tr>
+                  <tr><td><kbd>Tab</kbd></td><td>Y</td><td data-i18n="controls.map">Catchment overview map</td></tr>
+                  <tr><td><kbd data-key="KeyR">R</kbd></td><td>RT</td><td data-i18n="controls.storm">Run a 1-in-30 design storm</td></tr>
+                  <tr><td><kbd data-key="KeyZ">Z</kbd></td><td data-i18n="controls.undo.pad">D-pad left</td><td data-i18n="controls.undo">Undo the last feature</td></tr>
+                  <tr><td><kbd data-key="KeyK">K</kbd></td><td>Start</td><td data-i18n="controls.save">Save, and copy a share link</td></tr>
                 </tbody>
               </table>
             </div>
           </div>
           <div class="aside">
-            <h3>Any controller works</h3>
-            <p>
+            <h3 data-i18n="controls.anyController.title">Any controller works</h3>
+            <p data-i18n="controls.anyController.body">
               Bluetooth or USB, Xbox or PlayStation: the browser maps them all onto the same layout.
               Connect it and press a button once to wake it up.
             </p>
-            <h3>For teaching</h3>
-            <p>
+            <h3 data-i18n="controls.teaching.title">For teaching</h3>
+            <p data-i18n="controls.teaching.body">
               The same seed always builds the same catchment, so a class can all work on one
-              landscape. Add <code>?seed=132</code> to the play link, and
-              <code>?size=small</code> or <code>large</code> to change how big it is.
+              landscape. Add <code>?seed=132</code> to the play link,
+              <code>?size=small</code> or <code>large</code> to change how big it is, and
+              <code>?lang=en</code>, <code>es</code>, <code>de</code> or <code>fr</code> to pick its
+              language.
             </p>
-            <p>
+            <p data-i18n="controls.teaching.link">
               <a href="play/?seed=132">Open catchment 132</a>, the one in the trailer.
             </p>
-            <h3>What it runs on</h3>
-            <p>
+            <h3 data-i18n="controls.runsOn.title">What it runs on</h3>
+            <p data-i18n="controls.runsOn.body">
               Any recent desktop browser with WebGL. It’s built for a laptop or desktop: on a phone
               you can look around, but you’ll need a controller to walk. On a Meta Quest it runs
               <a href="#vr">in VR</a>.
@@ -802,9 +820,9 @@
       <section id="vr">
         <div class="wrap">
           <div class="section-head">
-            <p class="eyebrow">In VR</p>
-            <h2>Put the catchment on a table</h2>
-            <p>
+            <p data-i18n="vr.eyebrow" class="eyebrow">In VR</p>
+            <h2 data-i18n="vr.title">Put the catchment on a table</h2>
+            <p data-i18n="vr.intro">
               On a Meta Quest, Downstream becomes the diorama it’s drawn to look like. Open the game
               in the headset’s browser and press <strong>Enter VR</strong>: the catchment shrinks
               onto a table in front of you, your character stands on it, and you look around by
@@ -814,19 +832,19 @@
 
           <div class="features">
             <article class="feature">
-              <a class="feature__shot frame" href="media/vr-table.jpg" data-caption="At the table, pointing at the panel">
-                <img src="/media/vr-table-960.jpg" srcset="/media/vr-table-960.jpg 960w, /media/vr-table.jpg 1920w" sizes="(max-width: 860px) 100vw, 640px" width="1920" height="1080" loading="lazy" alt="In a VR headset: the player's character stands on a tabletop landscape beside a stream and a tree, with a readout over its head. A panel at the left edge of the table shows wood, stone, the tools and catchment health, and a ray from the controller points at its Storm button." />
+              <a class="feature__shot frame" href="media/vr-table.jpg" data-i18n-caption="vr.table.caption" data-caption="At the table, pointing at the panel">
+                <img src="/media/vr-table-960.jpg" srcset="/media/vr-table-960.jpg 960w, /media/vr-table.jpg 1920w" sizes="(max-width: 860px) 100vw, 640px" width="1920" height="1080" loading="lazy" data-i18n-alt="vr.table.alt" alt="In a VR headset: the player's character stands on a tabletop landscape beside a stream and a tree, with a readout over its head. A panel at the left edge of the table shows wood, stone, the tools and catchment health, and a ray from the controller points at its Storm button." />
               </a>
               <div>
-                <p class="feature__step">At the table</p>
-                <h3>Look down on your own catchment</h3>
-                <p>
+                <p data-i18n="vr.table.step" class="feature__step">At the table</p>
+                <h3 data-i18n="vr.table.title">Look down on your own catchment</h3>
+                <p data-i18n="vr.table.body">
                   Your character is about the size of a chess piece. As they walk, the landscape
                   glides along beneath you, and it turns in snaps rather than swinging round, so
                   the horizon stays level. The readout floats over their head, telling you what
                   drains through a spot before you build.
                 </p>
-                <p>
+                <p data-i18n="vr.table.body2">
                   Everything else is on the panel at the edge of the table: point the right
                   controller at it and pull the trigger.
                 </p>
@@ -834,13 +852,13 @@
             </article>
 
             <article class="feature">
-              <a class="feature__shot frame" href="media/vr-board.jpg" data-caption="The whole catchment as a tabletop model">
-                <img src="/media/vr-board-960.jpg" srcset="/media/vr-board-960.jpg 960w, /media/vr-board.jpg 1920w" sizes="(max-width: 860px) 100vw, 640px" width="1920" height="1080" loading="lazy" alt="Zoomed out in VR: the whole catchment as a model on a wooden plinth, with the source-risk map over it and the river network converging on the outlet notch at the front. The panel beside it shows the risk-map legend." />
+              <a class="feature__shot frame" href="media/vr-board.jpg" data-i18n-caption="vr.board.caption" data-caption="The whole catchment as a tabletop model">
+                <img src="/media/vr-board-960.jpg" srcset="/media/vr-board-960.jpg 960w, /media/vr-board.jpg 1920w" sizes="(max-width: 860px) 100vw, 640px" width="1920" height="1080" loading="lazy" data-i18n-alt="vr.board.alt" alt="Zoomed out in VR: the whole catchment as a model on a wooden plinth, with the source-risk map over it and the river network converging on the outlet notch at the front. The panel beside it shows the risk-map legend." />
               </a>
               <div>
-                <p class="feature__step">Zoomed out</p>
-                <h3>The whole model, within reach</h3>
-                <p>
+                <p data-i18n="vr.board.step" class="feature__step">Zoomed out</p>
+                <h3 data-i18n="vr.board.title">The whole model, within reach</h3>
+                <p data-i18n="vr.board.body">
                   Push the right stick and the catchment comes to rest on the table as a model
                   about 1.4 m across, on its own plinth, with the risk map laid over it. Lean in to
                   follow a stream from the ridge to the outlet, or crouch to see the valley’s
@@ -854,35 +872,35 @@
             <div class="table-scroll">
               <table>
                 <thead>
-                  <tr><th scope="col">Touch controllers</th><th scope="col">Does</th></tr>
+                  <tr><th scope="col" data-i18n="vr.controllers">Touch controllers</th><th scope="col" data-i18n="controls.does">Does</th></tr>
                 </thead>
                 <tbody>
-                  <tr><td>Left stick</td><td>Walk (left trigger to run)</td></tr>
-                  <tr><td>Right stick</td><td>Left and right turn the table; up and down zoom</td></tr>
-                  <tr><td>Right stick click</td><td>Jump between close up, halfway and the whole catchment</td></tr>
-                  <tr><td>A or right trigger</td><td>Build where you’re facing</td></tr>
-                  <tr><td>B</td><td>Gather wood, stone or the spade</td></tr>
-                  <tr><td>X / Y</td><td>Next risk layer / overlay off</td></tr>
-                  <tr><td>Grips</td><td>Previous and next tool</td></tr>
-                  <tr><td>Point at the panel</td><td>Storm, undo, save, pick a tool or layer, and leave VR</td></tr>
+                  <tr><td data-i18n="vr.walk.pad">Left stick</td><td data-i18n="vr.walk">Walk (left trigger to run)</td></tr>
+                  <tr><td data-i18n="vr.turn.pad">Right stick</td><td data-i18n="vr.turn">Left and right turn the table; up and down zoom</td></tr>
+                  <tr><td data-i18n="vr.zoom.pad">Right stick click</td><td data-i18n="vr.zoom">Jump between close up, halfway and the whole catchment</td></tr>
+                  <tr><td data-i18n="vr.build.pad">A or right trigger</td><td data-i18n="controls.build">Build where you’re facing</td></tr>
+                  <tr><td>B</td><td data-i18n="controls.gather">Gather wood, stone or the spade</td></tr>
+                  <tr><td>X / Y</td><td data-i18n="controls.overlay">Next risk layer / overlay off</td></tr>
+                  <tr><td data-i18n="vr.grips.pad">Grips</td><td data-i18n="vr.grips">Previous and next tool</td></tr>
+                  <tr><td data-i18n="vr.panel.pad">Point at the panel</td><td data-i18n="vr.panel">Storm, undo, save, pick a tool or layer, and leave VR</td></tr>
                 </tbody>
               </table>
             </div>
             <div class="aside">
-              <h3>What you need</h3>
-              <p>
+              <h3 data-i18n="vr.need.title">What you need</h3>
+              <p data-i18n="vr.need.body">
                 A Meta Quest and its own browser: no app and no install, and the same link as
                 everywhere else. The <strong>Enter VR</strong> button only appears in a browser that
                 can start a VR session, so you won’t see it on a laptop. Other headsets that support
                 WebXR may work too.
               </p>
-              <h3>Sitting or standing</h3>
-              <p>
+              <h3 data-i18n="vr.sitting.title">Sitting or standing</h3>
+              <p data-i18n="vr.sitting.body">
                 The table is set from your eye height when you start, so either works. If it ends up
                 in the wrong place, hold the Meta button on the right controller to recentre.
               </p>
-              <h3>Lighter on a headset</h3>
-              <p>
+              <h3 data-i18n="vr.lighter.title">Lighter on a headset</h3>
+              <p data-i18n="vr.lighter.body">
                 A headset draws every frame twice, once for each eye, so it gets a lighter scene
                 than a desktop does: fewer trees, and shadows updated less often. The model
                 underneath is exactly the same.
@@ -894,14 +912,14 @@
 
       <section class="cta">
         <div class="wrap">
-          <h2>The river’s waiting</h2>
-          <p>No install and no account. Your catchment is generated in a second or two.</p>
+          <h2 data-i18n="cta.title">The river’s waiting</h2>
+          <p data-i18n="cta.body">No install and no account. Your catchment is generated in a second or two.</p>
           <div class="hero__actions">
             <a class="button button--primary" href="play/">
               <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M8 5.5v13a1 1 0 0 0 1.5.86l10.4-6.5a1 1 0 0 0 0-1.72L9.5 4.64A1 1 0 0 0 8 5.5Z" /></svg>
-              Play Downstream
+              <span data-i18n="cta.play">Play Downstream</span>
             </a>
-            <a class="button button--quiet" href="https://github.com/simreaney/downstream">Source on GitHub</a>
+            <a data-i18n="cta.source" class="button button--quiet" href="https://github.com/simreaney/downstream">Source on GitHub</a>
           </div>
         </div>
       </section>
@@ -909,21 +927,22 @@
 
     <footer>
       <div class="wrap">
-        <p>Downstream is by <a href="https://simreaney.github.io/">Sim Reaney</a>, Department of Geography, Durham University.</p>
-        <nav aria-label="Footer">
-          <a href="play/">Play</a>
+        <p data-i18n="footer.credit">Downstream is by <a href="https://simreaney.github.io/">Sim Reaney</a>, Department of Geography, Durham University.</p>
+        <nav data-i18n-aria-label="footer.nav" aria-label="Footer">
+          <a data-i18n="footer.play" href="play/">Play</a>
           <a href="https://github.com/simreaney/downstream">GitHub</a>
-          <a href="https://github.com/simreaney/downstream/blob/main/DESIGN.md">Design notes</a>
+          <a data-i18n="footer.design" href="https://github.com/simreaney/downstream/blob/main/DESIGN.md">Design notes</a>
         </nav>
       </div>
     </footer>
 
-    <dialog class="lightbox" aria-label="Screenshot">
-      <button type="button" aria-label="Close">×</button>
+    <dialog class="lightbox" data-i18n-aria-label="lightbox.label" aria-label="Screenshot">
+      <button type="button" data-i18n-aria-label="lightbox.close" aria-label="Close">×</button>
       <img alt="" />
       <p></p>
     </dialog>
 
+    <script type="module" src="/src/landing.ts"></script>
     <script type="module">
       // The hero loop is decoration; anyone who has asked for less motion gets
       // its first frame instead.

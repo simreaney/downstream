@@ -47,8 +47,8 @@ self.onmessage = (event: MessageEvent<SimRequest>): void => {
 
       case "generate": {
         const { jobId, seed, layer, spec } = request;
-        const result = handleGenerate(seed, layer, spec, (progress, message) => {
-          post({ type: "progress", jobId, progress, message });
+        const result = handleGenerate(seed, layer, spec, (progress, stage) => {
+          post({ type: "progress", jobId, progress, stage });
         });
 
         const { arrays } = result.world;

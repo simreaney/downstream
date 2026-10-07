@@ -128,33 +128,33 @@ export function runFullScimap(
   const area = cellAreaM2(spec);
   const config = defaultConfig(spec);
 
-  onProgress?.(34, "2.1 Removing depressions…");
+  onProgress?.(34, "stage.removeDepressions");
   fillDepressions(dem, spec, outlet);
 
-  onProgress?.(38, "2.2 Measuring slope and curvature…");
+  onProgress?.(38, "stage.slope");
   const { slopeDeg, curvature } = computeDerivatives(dem, spec);
 
-  onProgress?.(42, "2.3 Partitioning flow…");
+  onProgress?.(42, "stage.partitionFlow");
   const table = buildFd8Table(dem, spec);
   const downstream = buildDownstreamIndex(dem, spec);
 
-  onProgress?.(48, "2.4 Accumulating upslope area…");
+  onProgress?.(48, "stage.accumulate");
   const accum = accumulate(table, spec);
   const d8Accum = accumulateD8(downstream, table.order);
   const channelMask = extractChannelMask(d8Accum, config.channelThresholdCells);
 
-  onProgress?.(54, "2.5 Weighting rainfall…");
+  onProgress?.(54, "stage.rainfall");
   const rainfallScaled = scaleRainfall(generateRainfall(dem));
 
-  onProgress?.(58, "2.6 Computing wetness…");
+  onProgress?.(58, "stage.wetness");
   const twi = computeTwi(accum, slopeDeg, rainfallScaled);
   assertFinite(twi, "twi");
   const twiEffective = Float64Array.from(twi);
 
-  onProgress?.(62, "2.7 Tracing flow paths to the channel network…");
+  onProgress?.(62, "stage.flowPaths");
   const networkIndex = networkIndexSweep(twiEffective, downstream, table.order, channelMask);
 
-  onProgress?.(68, "2.8 Freezing the baseline…");
+  onProgress?.(68, "stage.freezeBaseline");
   const connectivityBounds = deriveConnectivityBounds(networkIndex);
   const connectivity = normaliseConnectivity(networkIndex, connectivityBounds);
 
@@ -178,7 +178,7 @@ export function runFullScimap(
   const inChannelBounds = deriveInChannelBounds(inChannelRaw, channelMask);
   const inChannel = normaliseInChannel(inChannelRaw, inChannelBounds);
 
-  onProgress?.(72, "2.9 Risk layers ready.");
+  onProgress?.(72, "stage.riskReady");
 
   return {
     arrays: {

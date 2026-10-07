@@ -74,11 +74,7 @@ export function createStormPlayer(options: StormPlayerOptions): StormPlayer {
     start(playback) {
       active = playback;
       elapsed = 0;
-      chart.show(
-        `Storm — ${playback.depthMm.toFixed(0)} mm, about 1 in ${Math.round(
-          playback.returnPeriodDays,
-        )} days`,
-      );
+      chart.show(playback);
     },
 
     update(dt) {

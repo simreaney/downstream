@@ -13,6 +13,7 @@
 
 import type { GridSpec } from "../core/grid";
 import { cellAreaM2 } from "../core/grid";
+import { t, type MessageKey } from "../i18n";
 import { channelThresholdCells, LandCover } from "../scimap/constants";
 import { isPlantable, isWorthPlanting } from "../scimap/landcover";
 import type { MainThreadArrays } from "../worker/client";
@@ -39,7 +40,7 @@ export type PlacementReason =
 export interface PlacementCheck {
   readonly ok: boolean;
   readonly reason: PlacementReason;
-  /** Human-readable, and where possible explaining the hydrology. */
+  /** Human-readable in the current language, and where possible explaining the hydrology. */
   readonly message: string;
   /** Upslope area draining through this cell, in square metres. */
   readonly interceptedAreaM2: number;
@@ -47,26 +48,25 @@ export interface PlacementCheck {
   readonly footprint: readonly number[];
 }
 
-const MESSAGES: Record<PlacementReason, string> = {
-  ok: "",
-  offMap: "Outside the catchment",
-  needSpade: "You need a spade to dig",
-  needWood: "Not enough wood",
-  needStone: "Not enough stone",
-  occupied: "Something is already here",
-  tooSteep: "Too steep to hold water",
-  notAHollow: "This sheds water — find a hollow",
-  tooLittleUpslope: "Almost nothing drains through here",
-  inChannel: "Not in the watercourse — an online pond blocks fish passage",
-  notInChannel: "Leaky dams go in a watercourse",
-  channelTooLarge: "This reach is too big — a leaky dam would wash out",
-  tooCloseToDam: "Too close to another dam to add much",
-  alreadyWooded: "Already wooded",
-  onWater: "Can't plant on water",
+const MESSAGES: Record<Exclude<PlacementReason, "ok">, MessageKey> = {
+  offMap: "placement.offMap",
+  needSpade: "placement.needSpade",
+  needWood: "placement.needWood",
+  needStone: "placement.needStone",
+  occupied: "placement.occupied",
+  tooSteep: "placement.tooSteep",
+  notAHollow: "placement.notAHollow",
+  tooLittleUpslope: "placement.tooLittleUpslope",
+  inChannel: "placement.inChannel",
+  notInChannel: "placement.notInChannel",
+  channelTooLarge: "placement.channelTooLarge",
+  tooCloseToDam: "placement.tooCloseToDam",
+  alreadyWooded: "placement.alreadyWooded",
+  onWater: "placement.onWater",
 };
 
-function fail(reason: PlacementReason, area = 0): PlacementCheck {
-  return { ok: false, reason, message: MESSAGES[reason], interceptedAreaM2: area, footprint: [] };
+function fail(reason: Exclude<PlacementReason, "ok">, area = 0): PlacementCheck {
+  return { ok: false, reason, message: t(MESSAGES[reason]), interceptedAreaM2: area, footprint: [] };
 }
 
 function pass(area: number, footprint: readonly number[]): PlacementCheck {
