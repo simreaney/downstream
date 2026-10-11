@@ -50,7 +50,9 @@ the two **Enter VR** buttons. They only appear where a headset session can start
 - **First person**: the catchment at life size, seen through your character's
   eyes, at the character's eye height whether you sit or stand. The placement
   ghost a few steps ahead shows where you will build, and the readout floats
-  over it.
+  over it. Walking moves your view, so it is less comfortable than the
+  tabletop for some players; turning is still in snaps. There is a
+  [short clip of it](public/media/vr-first-person.mp4) on the landing page.
 
 | Touch controllers | |
 |---|---|
@@ -97,6 +99,7 @@ npx vitest run tools/preview.test.ts   # renders terrain and risk layers to PNG
 npx vitest run tools/bench.test.ts     # times the recompute tiers
 node tools/shot.mjs --keys "ffm"       # screenshots the running game (after npm run build)
 node tools/record.mjs                  # re-records the trailer and screenshots
+node tools/record-vr.mjs               # re-records the first-person VR clip
 ```
 
 `tools/shot.mjs` drives the locally installed Chrome through `playwright-core`.
@@ -114,6 +117,18 @@ exception: they were captured from the built game in Meta's emulated Quest 3
 (the `iwer` package), which `record.mjs` does not drive, so re-take them by hand
 if the headset view changes. It needs `ffmpeg` on the `PATH`, and a GPU for a smooth
 60 fps capture; on a Mac, headless Chrome gets one.
+
+`tools/record-vr.mjs` records the landing page's first-person VR clip
+(`vr-first-person.mp4` and its poster). It installs the same emulated Quest 3
+into the page, presses **First person**, and walks a short script by moving the
+emulated headset and pushing its controllers' sticks and buttons, so the game
+runs its real session, rig and controls. The clip is one eye, undistorted, with
+a narrower field of view than the headset's, which reads better on a flat
+screen. It does not need a GPU: the page's clock is stepped one frame at a time
+and each frame is read back off the canvas, so the clip is smooth at 30 fps
+however slowly SwiftShader draws it (about 1.7 s a frame, so roughly 25 minutes
+for the 33-second clip). Pass `--chrome PATH` where Chrome is not installed as
+a channel, for example Playwright's Chromium.
 
 ## How it fits together
 

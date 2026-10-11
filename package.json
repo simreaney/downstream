@@ -20,6 +20,7 @@
   },
   "devDependencies": {
     "@types/three": "0.185.4",
+    "iwer": "^2.5.0",
     "playwright-core": "^1.56.1",
     "typescript": "5.9.3",
     "vite": "7.3.6",

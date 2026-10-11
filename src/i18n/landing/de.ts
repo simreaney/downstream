@@ -132,6 +132,14 @@ export const de: LandingMessages = {
   "vr.board.title": "Das ganze Modell in Reichweite",
   "vr.board.body":
     "Drück den rechten Stick, und das Einzugsgebiet liegt als etwa 1,4 m breites Modell auf eigenem Sockel auf dem Tisch, mit der Risikokarte darüber. Beug dich vor, um einem Bach vom Kamm bis zum Auslass zu folgen, oder geh in die Hocke, um das Talprofil an der Seite des Modells zu sehen.",
+  "vr.fp.label": "Downstream in VR, in der Ego-Perspektive",
+  "vr.fp.download": "Clip herunterladen (MP4)",
+  "vr.fp.step": "Ego-Perspektive",
+  "vr.fp.title": "Oder steh mitten im Tal",
+  "vr.fp.body":
+    "Drück stattdessen <strong>Ego-Perspektive</strong>, und das Einzugsgebiet ist lebensgroß: Du siehst es mit den Augen deiner Figur, auf ihrer Höhe, ob du sitzt oder stehst. Schau nach unten, und die Baustelle liegt ein paar Schritte vor dir, mit der Anzeige darüber; das Panel wartet unten links.",
+  "vr.fp.body2":
+    "Beim Gehen bewegt sich dein Blick, das verlangt deinem Magen mehr ab als der Tisch. Gedreht wird weiter in Sprüngen, und der Horizont kippt nie.",
 
   "vr.controllers": "Touch-Controller",
   "vr.walk.pad": "Linker Stick",

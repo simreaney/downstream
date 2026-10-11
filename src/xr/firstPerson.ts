@@ -30,10 +30,14 @@ export const EYE_HEIGHT_M = 1.45;
 
 /**
  * Where the dashboard is stood from, relative to the eyes when the session
- * starts: about where a lectern would be for someone standing at it.
+ * starts. `hud.ts` stands the panel up and to the left of this point, which
+ * puts it low on the left at about arm's length — round at the edge of the
+ * view, as a lectern beside the player would be. Any further in, as the
+ * tabletop has it, and it covers the ground the player is walking towards.
  */
-const DASH_BELOW_EYES_M = 0.5;
-const DASH_DISTANCE_M = 0.55;
+const DASH_LEFT_M = 0.07;
+const DASH_BELOW_EYES_M = 0.62;
+const DASH_DISTANCE_M = 0.51;
 
 /** Seconds for the eyes to follow the ground up or down under the character. */
 const RIDE_TAU = 0.12;
@@ -93,7 +97,7 @@ export function createFirstPerson(options: FirstPersonOptions): XrView {
     update(target, head, dt) {
       if (origin === null) {
         origin = head.clone();
-        anchor.set(origin.x, origin.y - DASH_BELOW_EYES_M, origin.z - DASH_DISTANCE_M);
+        anchor.set(origin.x - DASH_LEFT_M, origin.y - DASH_BELOW_EYES_M, origin.z - DASH_DISTANCE_M);
       }
       ground = initialised ? approach(ground, target.y, RIDE_TAU, dt) : target.y;
 
