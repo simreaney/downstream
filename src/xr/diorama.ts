@@ -42,6 +42,7 @@ import * as THREE from "three";
 import { approach, clamp, lerp, smoothstep } from "../core/clamp";
 import type { GridSpec } from "../core/grid";
 import { sampleHeight } from "../render/terrainMesh";
+import type { XrView } from "./view";
 
 /** World metres per real metre at the default zoom. */
 export const DEFAULT_XR_SCALE = 18;
@@ -91,46 +92,9 @@ export interface DioramaOptions {
   readonly centreElevation: number;
 }
 
-export interface Diorama {
-  /** World metres per real metre, after easing. */
-  readonly scale: number;
+export interface Diorama extends XrView {
   /** How far the table has been turned, in radians about Y. */
   readonly yaw: number;
-  /** 0 at the default zoom and closer, 1 with the whole catchment on the table. */
-  readonly overview: number;
-  /**
-   * World-space distance from the eyes to the focus: what the desktop follow
-   * camera calls its distance, for sizing the shadowed region.
-   */
-  readonly viewDistance: number;
-  /** Where the table is in rig space (real metres), once a head pose has fixed its height. */
-  readonly anchor: THREE.Vector3;
-  /** Whether the table height has been fixed from a head pose yet. */
-  readonly placed: boolean;
-  /**
-   * Movement heading for the player controller, in the follow camera's
-   * convention: forward is (sin h, 0, cos h) in world space. Taken from the
-   * head's yaw, so pushing the stick forward walks the way the player looks.
-   */
-  heading(headQuaternion: THREE.Quaternion): number;
-  /** Turn the table by whole snaps. Positive turns the view left, as the gamepad's orbit does. */
-  turn(steps: number): void;
-  /** Step to the next zoom stop outwards, wrapping back in from the board view. */
-  cycleZoom(): void;
-  /**
-   * Start afresh, for a new session: forget the table height, snap rather than
-   * ease on the next update, and face along `heading` (same convention as
-   * `heading()`), so the headset opens looking where the screen was.
-   */
-  reset(heading: number): void;
-  /**
-   * Place the rig so the focus sits on the table.
-   *
-   * `head` is the headset's position in rig space — the XR reference space, in
-   * real metres. `zoom` is a change in the log of the scale, as
-   * `InputState.zoom` reports it: positive pulls back.
-   */
-  update(target: THREE.Vector3, head: THREE.Vector3, dt: number, zoom: number): void;
 }
 
 export function createDiorama(options: DioramaOptions): Diorama {

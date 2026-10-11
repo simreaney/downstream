@@ -82,6 +82,13 @@ export interface XrHud extends Hud {
   /** Float the label over the character's head, facing the eyes, at a constant real size. */
   placeLabel(feet: THREE.Vector3, eye: THREE.Vector3, scale: number): void;
   /**
+   * Float the label just above `point`, facing the eyes. `scale` multiplies its
+   * real size, so a label further off can be made to read the same.
+   */
+  floatLabel(point: THREE.Vector3, eye: THREE.Vector3, scale: number): void;
+  /** Remind the player of the first-person controls rather than the tabletop's. */
+  setFirstPerson(on: boolean): void;
+  /**
    * Start or stop presenting. Showing repaints both canvases from current
    * state, since nothing was painted while the player was on the page; hiding
    * takes both planes out of the scene's draw list.
@@ -353,6 +360,7 @@ export function createXrHud(): XrHud {
   const trends = new Map<keyof Scores, { up: boolean; until: number }>();
   let layer: LayerKey = "none";
   let tutorial: string | null = null;
+  let firstPerson = false;
   let hovered: DashboardButton | null = null;
   let dashDirty = true;
   /** When the next trend arrow expires, so the dashboard repaints without it. */
@@ -535,7 +543,7 @@ export function createXrHud(): XrHud {
       button(ctx, LAYOUT.skip, "skipTutorial", t("tutorial.skip"), { size: 26 });
     } else {
       ctx.fillStyle = INK_SOFT;
-      const { lines, lineHeight } = fitLines(ctx, t("vr.controls"), box.w - 44, 3, 500, 23, 19);
+      const { lines, lineHeight } = fitLines(ctx, t(firstPerson ? "vr.controlsFirstPerson" : "vr.controls"), box.w - 44, 3, 500, 23, 19);
       lines.forEach((line, i) =>
         ctx.fillText(line, box.x + 22, box.y + 50 + (i - (lines.length - 1) / 2) * lineHeight),
       );
@@ -627,6 +635,21 @@ export function createXrHud(): XrHud {
     labelPaintedAt = -Infinity;
   });
 
+  const floatLabel = (point: THREE.Vector3, eye: THREE.Vector3, scale: number): void => {
+    const mesh = tag.mesh;
+    mesh.scale.setScalar(scale);
+    // Lifted along whichever way is up *on screen*, not straight up: the
+    // player mostly looks down on the character, and from above, a label
+    // raised vertically slides down over the head it is meant to clear.
+    toEye.subVectors(eye, point).normalize();
+    screenUp.set(0, 1, 0).addScaledVector(toEye, -toEye.y);
+    // Looking straight down, screen-up is the way the player faces.
+    if (screenUp.lengthSq() < 1e-6) screenUp.set(-toEye.x, 0, -toEye.z);
+    screenUp.normalize();
+    mesh.position.copy(point).addScaledVector(screenUp, (LABEL_GAP_M + LABEL_HEIGHT_M / 2) * scale);
+    mesh.lookAt(eye);
+  };
+
   return {
     dashboard: dash.mesh,
     label: tag.mesh,
@@ -683,6 +706,12 @@ export function createXrHud(): XrHud {
       dashDirty = true;
     },
 
+    setFirstPerson(on) {
+      if (on === firstPerson) return;
+      firstPerson = on;
+      dashDirty = true;
+    },
+
     setControllersMissing(missing) {
       if (missing === controllersMissing) return;
       controllersMissing = missing;
@@ -728,20 +757,11 @@ export function createXrHud(): XrHud {
     },
 
     placeLabel(feet, eye, scale) {
-      const mesh = tag.mesh;
-      mesh.scale.setScalar(scale);
-      // Lifted along whichever way is up *on screen*, not straight up: the
-      // player mostly looks down on the character, and from above, a label
-      // raised vertically slides down over the head it is meant to clear.
       headTop.set(feet.x, feet.y + CHARACTER_HEIGHT_M, feet.z);
-      toEye.subVectors(eye, headTop).normalize();
-      screenUp.set(0, 1, 0).addScaledVector(toEye, -toEye.y);
-      // Looking straight down, screen-up is the way the player faces.
-      if (screenUp.lengthSq() < 1e-6) screenUp.set(-toEye.x, 0, -toEye.z);
-      screenUp.normalize();
-      mesh.position.copy(headTop).addScaledVector(screenUp, (LABEL_GAP_M + LABEL_HEIGHT_M / 2) * scale);
-      mesh.lookAt(eye);
+      floatLabel(headTop, eye, scale);
     },
+
+    floatLabel,
 
     show(on) {
       if (on) {

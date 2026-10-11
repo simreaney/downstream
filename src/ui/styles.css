@@ -259,8 +259,26 @@ kbd {
   cursor: pointer;
 }
 
-/* Shown only where an immersive session can start; see xr/mode.ts. */
+/* Shown only where an immersive session can start; see xr/mode.ts. One
+   button per view, joined into a single pill under an "Enter VR" caption. */
 .hud__vr {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+}
+
+.hud__vr[hidden] {
+  display: none;
+}
+
+.hud__vr-caption {
+  font-size: 0.72rem;
+  font-weight: 650;
+  color: var(--ink-soft);
+}
+
+.hud__vr-button {
   padding: 0.4rem 0.8rem;
   border: none;
   border-radius: 999px;
@@ -273,11 +291,7 @@ kbd {
   cursor: pointer;
 }
 
-.hud__vr[hidden] {
-  display: none;
-}
-
-.hud__vr:disabled {
+.hud__vr-button:disabled {
   opacity: 0.6;
   cursor: progress;
 }

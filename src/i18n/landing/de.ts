@@ -114,7 +114,7 @@ export const de: LandingMessages = {
   "vr.eyebrow": "In VR",
   "vr.title": "Das Einzugsgebiet auf dem Tisch",
   "vr.intro":
-    "Auf einer Meta Quest wird Downstream zu dem Diorama, nach dem es aussieht. Öffne das Spiel im Browser des Headsets und drück <strong>VR starten</strong>: Das Einzugsgebiet schrumpft auf einen Tisch vor dir, deine Figur steht darauf, und du siehst dich um, indem du den Kopf bewegst.",
+    "Auf einer Meta Quest wird Downstream zu dem Diorama, nach dem es aussieht. Öffne das Spiel im Browser des Headsets und drück unter <strong>VR starten</strong> auf <strong>Tisch</strong>: Das Einzugsgebiet schrumpft auf einen Tisch vor dir, deine Figur steht darauf, und du siehst dich um, indem du den Kopf bewegst. Oder drück <strong>Ego-Perspektive</strong>, um es in Lebensgröße mit den Augen deiner Figur zu durchwandern.",
 
   "vr.table.caption": "Am Tisch, der Zeiger auf dem Panel",
   "vr.table.alt":

@@ -114,7 +114,7 @@ export const es: LandingMessages = {
   "vr.eyebrow": "En RV",
   "vr.title": "Pon la cuenca sobre una mesa",
   "vr.intro":
-    "En un visor Meta Quest, Downstream se convierte en el diorama que su estilo imita. Abre el juego en el navegador del visor y pulsa <strong>Entrar en RV</strong>: la cuenca se encoge sobre una mesa delante de ti, tu personaje está de pie sobre ella y miras alrededor moviendo la cabeza.",
+    "En un visor Meta Quest, Downstream se convierte en el diorama que su estilo imita. Abre el juego en el navegador del visor y pulsa <strong>Mesa</strong>, junto a <strong>Entrar en RV</strong>: la cuenca se encoge sobre una mesa delante de ti, tu personaje está de pie sobre ella y miras alrededor moviendo la cabeza. O pulsa <strong>Primera persona</strong> para recorrerla a tamaño real, con los ojos de tu personaje.",
 
   "vr.table.caption": "En la mesa, apuntando al panel",
   "vr.table.alt":

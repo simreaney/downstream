@@ -160,6 +160,10 @@ export const es: Messages = {
   "chart.noChange": "sin cambio apreciable",
 
   "vr.enter": "Entrar en RV",
+  "vr.tabletop": "Mesa",
+  "vr.tabletopHint": "La cuenca como una maqueta sobre una mesa delante de ti",
+  "vr.firstPerson": "Primera persona",
+  "vr.firstPersonHint": "Recorre la cuenca a tamaño real, con los ojos de tu personaje",
   "vr.wood": "Madera {count}",
   "vr.stone": "Piedra {count}",
   "vr.spade": "Pala",
@@ -175,5 +179,7 @@ export const es: Messages = {
   "vr.exit": "Salir de RV",
   "vr.controls":
     "Joystick izquierdo caminar · gatillo izquierdo correr · A o gatillo construir · B recoger · X / Y mapa de riesgo · botones laterales cambiar de herramienta · joystick derecho girar y zoom",
+  "vr.controlsFirstPerson":
+    "Joystick izquierdo caminar · gatillo izquierdo correr · A o gatillo construir · B recoger · X / Y mapa de riesgo · botones laterales cambiar de herramienta · joystick derecho girar",
   "vr.pickUpControllers": "Toma los mandos para jugar",
 };

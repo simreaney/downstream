@@ -456,7 +456,7 @@ async function boot(): Promise<void> {
       return;
     }
     if (action === "zoomCycle") {
-      if (xr.presenting) xr.diorama.cycleZoom();
+      if (xr.presenting) xr.view.cycleZoom();
       else camera.cycleZoom();
       return;
     }
@@ -580,6 +580,8 @@ async function boot(): Promise<void> {
 
   // The player's chest, which is what the camera's see-through window aims at.
   const sightTarget = new THREE.Vector3();
+  /** The build target on the ground, for the headset's first-person readout. */
+  const aim = new THREE.Vector3();
 
   renderer.onFrame((dt, elapsed) => {
     // In a headset, intent comes from the controllers and "forward" is where
@@ -594,12 +596,18 @@ async function boot(): Promise<void> {
     player.update(intent, immersive ? xr.heading : camera.yaw, dt);
     sightTarget.copy(player.position);
     sightTarget.y += 1.2;
+    // Before the actions below, so a build lands where the player is facing
+    // now, and before the headset's update, whose readout floats over it.
+    facingTarget(world.spec, player.position.x, player.position.z, player.yaw, target);
+    aim.set(target.x, player.position.y, target.z);
     if (immersive) {
-      xr.update(player.position, dt);
+      xr.update(player.position, aim, dt);
       // A tabletop is flat; see `xr/diorama.ts` for why the bend would all
-      // but vanish at this scale anyway.
+      // but vanish at this scale anyway. At life size it would not vanish,
+      // but it is bent in view space, so in a headset the ground would sway
+      // as the player tipped their head.
       setCurvatureScale(scene.curvature, 0);
-      scene.lighting.setShadowReach(xr.diorama.viewDistance);
+      scene.lighting.setShadowReach(xr.view.viewDistance);
       scene.props.fade.set(xr.eye, sightTarget);
     } else {
       camera.update(player.position, intent.lookX, intent.lookY, dt, intent.zoom);
@@ -615,6 +623,8 @@ async function boot(): Promise<void> {
     overlay.update(dt);
     if (overviewMap.visible) overviewMap.setPlayer(player.position.x, player.position.z, player.yaw);
 
+    // In first person the camera is inside the character's head.
+    scene.character.root.visible = !(immersive && xr.kind === "firstPerson");
     scene.character.root.position.copy(player.position);
     scene.character.root.rotation.y = player.yaw;
     scene.character.animate(elapsed, player.speed);
@@ -638,8 +648,6 @@ async function boot(): Promise<void> {
       if (due) runStorm(due.depthMm, t("toast.rain", { depth: formatNumber(due.depthMm) }));
     }
     scene.fish.setVisibleCount(receptors.fishCount);
-
-    facingTarget(world.spec, player.position.x, player.position.z, player.yaw, target);
 
     // Gathering takes priority in the readout: if the player is standing next to
     // something they can pick up, that is what E will do.

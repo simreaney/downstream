@@ -40,26 +40,32 @@ only report a gamepad after its first input.
 
 ## VR on a Meta Quest
 
-Open the game in the Quest's browser and press **Enter VR**, under the controls
-hint. The button only appears where a headset session can start. In the headset
-the catchment becomes a tabletop diorama: your character stands on a table in
-front of you, and you look around by moving your head. Zoom all the way out and
-the whole catchment is laid out on the table as a model, on its own plinth.
+Open the game in the Quest's browser and, under the controls hint, pick one of
+the two **Enter VR** buttons. They only appear where a headset session can start.
+
+- **Tabletop**: the catchment becomes a tabletop diorama. Your character stands
+  on a table in front of you, and you look around by moving your head. Zoom all
+  the way out and the whole catchment is laid out on the table as a model, on
+  its own plinth.
+- **First person**: the catchment at life size, seen through your character's
+  eyes, at the character's eye height whether you sit or stand. The placement
+  ghost a few steps ahead shows where you will build, and the readout floats
+  over it.
 
 | Touch controllers | |
 |---|---|
 | left stick / left trigger | walk / run |
-| right stick ← → / ↑ ↓ | turn the table in 30° snaps / zoom |
-| right stick click | step through close, mid and whole-catchment zoom |
+| right stick ← → / ↑ ↓ | turn in 30° snaps / zoom (tabletop only) |
+| right stick click | step through close, mid and whole-catchment zoom (tabletop only) |
 | A or right trigger | build at the cell you are facing |
 | B | gather |
 | X / Y | next risk layer / turn it off |
 | left grip / right grip | previous / next tool |
 
 Everything else — storms, undo, save, choosing a tool or a layer directly, and
-leaving VR — is on the panel at the left of the table. Point the right
-controller at it and pull the trigger. The placement readout floats over your
-character.
+leaving VR — is on the panel at your left (at the edge of the table, in the
+tabletop view). Point the right controller at it and pull the trigger. On the
+tabletop, the placement readout floats over your character.
 
 WebXR only runs on a secure origin, so to try a local build on the headset,
 forward the dev server over USB rather than opening it by LAN address:
@@ -119,7 +125,7 @@ sim/      Gumbel storm depths, lag-and-route flood model
 worker/   owns the canonical arrays; the main thread never sees them
 render/   one terrain mesh, instanced props, toon + curved-world shaders
 game/     interventions, validity, scoring, receptors, save
-xr/       the headset: tabletop rig, controllers, canvas HUD, plinth
+xr/       the headset: tabletop and first-person rigs, controllers, canvas HUD, plinth
 i18n/     the game's text in each language, and the landing page's
 ```
 

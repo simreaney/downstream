@@ -52,7 +52,7 @@ sim/      Gumbel storm depths, lag-and-route flood model
 worker/   owns the canonical arrays; the main thread never sees them
 render/   one terrain mesh, instanced props, toon + curved-world shaders
 game/     interventions, validity, scoring, receptors, save
-xr/       the headset: tabletop rig, controllers, canvas HUD, plinth
+xr/       the headset: tabletop and first-person rigs, controllers, canvas HUD, plinth
 ```
 
 **One worker.** Terrain generation, SCIMAP and storm routing never run
@@ -516,7 +516,23 @@ Moss and Astro Bot keep third-person VR comfortable.
 | Canvas HUD, mirrored | `xr/hud.ts`, `ui/hud.ts` | The DOM never reaches an immersive session. `mirrorHud` keeps the headset's panels current with the page's, so either can be on show |
 | Controls mirror the gamepad | `xr/controls.ts` | A builds, B gathers, X cycles the map, grips cycle tools. The right stick turns and zooms instead of orbiting, because the head does the looking |
 | Plinth | `xr/plinth.ts` | A sheet of terrain seen side-on is a cut-out. A soil section on a wooden base makes it a model |
+| First person as a second view | `xr/firstPerson.ts`, `xr/view.ts` | Picked on the page before entering. The same rig, unscaled, with the starting head pose put at the character's eyes. See below |
 | Headset detected by name | `config.ts` | The only user-agent check in the game. A Quest's chip passes the memory and core test, and it is the double draw at 72 Hz that makes it low-power |
+
+**First person is the option, not the default.** Some players want to stand in
+the valley rather than over it, so the page offers both views. In first person
+the rig is not scaled, so view space is world metres and the page's fog is right
+as it is. Curvature stays off all the same: it is bent in view space, so in a
+headset the ground would sway every time the player tipped their head. The
+height comes from the character, not the player: the starting head pose is put
+at the character's eyes, so a seated player sees from the same height as a
+standing one, and the head moves freely from there. The eyes follow the ground
+through a 0.12 s ease, since the heightfield's bumps read as jolts at walking
+pace. The character is hidden, because the camera is inside its head. The
+readout floats over the build target instead of over the head, scaled up with
+distance to read the same as on the tabletop. Zoom does nothing. Turning stays
+in snaps, but walking now moves the view itself, which is more than the tabletop
+asks of anyone's stomach; that is why the tabletop is listed first.
 
 **The culling camera ignored the rig's scale.** three culls a headset's view
 against one camera built to enclose both eyes. It measures the distance between

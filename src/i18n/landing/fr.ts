@@ -122,7 +122,7 @@ export const fr: LandingMessages = {
   "vr.eyebrow": "En VR",
   "vr.title": "Posez le bassin versant sur une table",
   "vr.intro":
-    "Sur Meta Quest, Downstream devient le diorama qu’il imite. Ouvrez le jeu dans le navigateur du casque et appuyez sur <strong>Entrer en VR</strong>\u00a0: le bassin versant se réduit sur une table devant vous, votre personnage s’y tient, et vous regardez autour de vous en bougeant la tête.",
+    "Sur Meta Quest, Downstream devient le diorama qu’il imite. Ouvrez le jeu dans le navigateur du casque et appuyez sur <strong>Table</strong>, à côté de <strong>Entrer en VR</strong>\u00a0: le bassin versant se réduit sur une table devant vous, votre personnage s’y tient, et vous regardez autour de vous en bougeant la tête. Ou appuyez sur <strong>Première personne</strong> pour le parcourir grandeur nature, avec les yeux de votre personnage.",
 
   "vr.table.caption": "À la table, en visant le panneau",
   "vr.table.alt":
