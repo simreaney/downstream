@@ -442,6 +442,16 @@
       .vr-controls td:nth-child(2) {
         white-space: normal;
       }
+      /* A clip in place of a screenshot: it plays in the row, not a lightbox. */
+      .feature__shot--video {
+        cursor: auto;
+      }
+      .feature__shot--video video {
+        display: block;
+        width: 100%;
+        aspect-ratio: 16 / 9;
+        background: #cfe2a6;
+      }
 
       .cta {
         text-align: center;
@@ -824,9 +834,10 @@
             <h2 data-i18n="vr.title">Put the catchment on a table</h2>
             <p data-i18n="vr.intro">
               On a Meta Quest, Downstream becomes the diorama it’s drawn to look like. Open the game
-              in the headset’s browser and press <strong>Enter VR</strong>: the catchment shrinks
-              onto a table in front of you, your character stands on it, and you look around by
-              moving your head.
+              in the headset’s browser and press <strong>Tabletop</strong> under
+              <strong>Enter VR</strong>: the catchment shrinks onto a table in front of you, your
+              character stands on it, and you look around by moving your head. Or press
+              <strong>First person</strong> to walk it at life size, through your character’s eyes.
             </p>
           </div>
 
@@ -863,6 +874,36 @@
                   about 1.4 m across, on its own plinth, with the risk map laid over it. Lean in to
                   follow a stream from the ridge to the outlet, or crouch to see the valley’s
                   profile in the side of the board.
+                </p>
+              </div>
+            </article>
+
+            <article class="feature">
+              <div class="feature__shot feature__shot--video frame">
+                <video
+                  controls
+                  playsinline
+                  muted
+                  preload="metadata"
+                  poster="/media/vr-first-person-poster.jpg"
+                  data-i18n-aria-label="vr.fp.label" aria-label="Downstream in VR, in the first-person view"
+                >
+                  <source src="/media/vr-first-person.mp4" type="video/mp4" />
+                  <a data-i18n="vr.fp.download" href="media/vr-first-person.mp4">Download the clip (MP4)</a>
+                </video>
+              </div>
+              <div>
+                <p data-i18n="vr.fp.step" class="feature__step">First person</p>
+                <h3 data-i18n="vr.fp.title">Or stand in the valley</h3>
+                <p data-i18n="vr.fp.body">
+                  Press <strong>First person</strong> instead and the catchment is life-size: you
+                  see it through your character’s eyes, at their height whether you sit or stand.
+                  Look down and the build spot is a few steps ahead, with the readout floating over
+                  it; the panel waits low on your left.
+                </p>
+                <p data-i18n="vr.fp.body2">
+                  Walking moves your view, so it asks more of your stomach than the table does.
+                  Turning stays in snaps, and the horizon never tilts.
                 </p>
               </div>
             </article>

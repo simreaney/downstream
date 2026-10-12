@@ -183,6 +183,10 @@ export const en = {
 
   // The headset's dashboard and label.
   "vr.enter": "Enter VR",
+  "vr.tabletop": "Tabletop",
+  "vr.tabletopHint": "The catchment as a model on a table in front of you",
+  "vr.firstPerson": "First person",
+  "vr.firstPersonHint": "Walk the catchment at life size, through your character’s eyes",
   "vr.wood": "Wood {count}",
   "vr.stone": "Stone {count}",
   "vr.spade": "Spade",
@@ -198,6 +202,8 @@ export const en = {
   "vr.exit": "Exit VR",
   "vr.controls":
     "Left stick walk · left trigger run · A or trigger build · B gather · X / Y risk map · grips change tool · right stick turn and zoom",
+  "vr.controlsFirstPerson":
+    "Left stick walk · left trigger run · A or trigger build · B gather · X / Y risk map · grips change tool · right stick turn",
   "vr.pickUpControllers": "Pick up your controllers to play",
 } as const;
 

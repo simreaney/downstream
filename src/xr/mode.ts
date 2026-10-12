@@ -2,8 +2,9 @@
  * Immersive VR, aimed at a standalone headset such as a Meta Quest.
  *
  * Everything that exists only in a headset lives behind this module: the page's
- * "Enter VR" button, the session, the camera rig that `diorama.ts` scales and
- * slides, the controllers (`controls.ts`) and their pointer, the headset HUD
+ * "Enter VR" buttons, the session, the camera rig — which `diorama.ts` scales
+ * and slides for the tabletop view, and `firstPerson.ts` sets at the
+ * character's eyes for the life-size one — the controllers (`controls.ts`) and their pointer, the headset HUD
  * (`hud.ts`), and the plinth under the board. `main.ts` asks each frame whether
  * a session is presenting and, if one is, takes the player's intent and heading
  * from here instead of from the page's input and follow camera. The rest of the
@@ -17,16 +18,18 @@
 import * as THREE from "three";
 import { isStandaloneHeadset } from "../config";
 import { clamp } from "../core/clamp";
-import { onLocaleChange, t } from "../i18n";
+import { onLocaleChange, t, type MessageKey } from "../i18n";
 import type { GameAction, InputState } from "../player/input";
 import type { Renderer } from "../render/renderer";
 import type { WorldScene } from "../render/scene";
 import type { Tutorial } from "../ui/tutorial";
 import { createXrControls, type XrControls } from "./controls";
-import { createDiorama, type Diorama } from "./diorama";
+import { createDiorama } from "./diorama";
+import { createFirstPerson } from "./firstPerson";
 import type { DashboardButton, XrHud } from "./hud";
 import { createPlinth } from "./plinth";
 import { correctUnionCamera } from "./unionCamera";
+import type { XrView, XrViewKind } from "./view";
 
 /**
  * Depth range while presenting, in real metres — view space is real metres
@@ -53,12 +56,24 @@ const HEADSET_SHADOW_INTERVAL = 2;
 /** Seconds without a controller before the player is asked to pick one up. */
 const MISSING_CONTROLLERS_GRACE = 1.5;
 
+/**
+ * In first person, the readout floats over the spot a build would go, this
+ * high above the character's feet: a little below the eyes, so it sits where
+ * the player is already looking down to.
+ */
+const AIM_LABEL_HEIGHT_M = 1.0;
+/**
+ * Distance at which the label is drawn at its own size — about how far it is
+ * on the tabletop. Further off, it is scaled up to read the same.
+ */
+const LABEL_READ_DISTANCE_M = 0.6;
+
 export interface XrModeOptions {
   readonly renderer: Renderer;
   readonly scene: WorldScene;
   readonly hud: XrHud;
   readonly tutorial: Tutorial;
-  /** Where the page's "Enter VR" button goes. */
+  /** Where the page's "Enter VR" buttons go. */
   readonly buttonHost: HTMLElement;
   /** The follow camera's heading, so the headset opens looking the way the screen was. */
   readonly heading: () => number;
@@ -77,15 +92,19 @@ export interface XrMode {
   readonly heading: number;
   /** The headset's position in world space, for the see-through window into the trees. */
   readonly eye: THREE.Vector3;
-  readonly diorama: Diorama;
+  /** Which view the session is in: the last one the player picked. */
+  readonly kind: XrViewKind;
+  /** The rig behind that view. */
+  readonly view: XrView;
   /** Read the controllers and the pointer. Call first in a frame. */
   poll(dt: number): void;
   /**
-   * Put the world on the table around the character, and the HUD around both.
+   * Place the rig around the character — on the table, or behind its eyes —
+   * and the HUD around both. `aim` is where a build would go, on the ground.
    * Call every presenting frame, after the player has moved: it also updates
    * the headset's camera, which three no longer does by itself in a session.
    */
-  update(feet: THREE.Vector3, dt: number): void;
+  update(feet: THREE.Vector3, aim: THREE.Vector3, dt: number): void;
   /** A short buzz in the right hand: a build, a refusal, a pickup. */
   pulse(strength: number, ms: number): void;
 }
@@ -162,6 +181,9 @@ export function createXrMode(options: XrModeOptions): XrMode {
   centreElevation /= scene.groundDem.length;
 
   const diorama = createDiorama({ rig, dem: scene.groundDem, spec: scene.spec, centreElevation });
+  const firstPerson = createFirstPerson({ rig });
+  let kind: XrViewKind = "tabletop";
+  let view: XrView = diorama;
   const controls: XrControls = createXrControls();
   const extent = Math.max(scene.spec.width, scene.spec.height) * scene.spec.cellSize;
 
@@ -190,6 +212,7 @@ export function createXrMode(options: XrModeOptions): XrMode {
   const head = new THREE.Vector3();
   const headQuaternion = new THREE.Quaternion();
   const eye = new THREE.Vector3();
+  const labelAt = new THREE.Vector3();
   const rayDirection = new THREE.Vector3();
   const actions = new Set<GameAction>();
 
@@ -243,10 +266,13 @@ export function createXrMode(options: XrModeOptions): XrMode {
     // can be corrected for the rig's scale; see `unionCamera.ts`.
     gl.xr.cameraAutoUpdate = false;
     gl.shadowMap.autoUpdate = shadowInterval === 1;
-    diorama.reset(options.heading());
+    view = kind === "firstPerson" ? firstPerson : diorama;
+    view.reset(options.heading());
     controls.reset();
+    hud.setFirstPerson(kind === "firstPerson");
     hud.show(true);
-    plinth.visible = true;
+    // A board needs its base; a landscape at life size is standing on the real one.
+    plinth.visible = kind === "tabletop";
     pageFog = renderer.scene.fog instanceof THREE.FogExp2 ? renderer.scene.fog.density : 0;
   });
 
@@ -267,7 +293,9 @@ export function createXrMode(options: XrModeOptions): XrMode {
     options.onExit();
   });
 
-  mountButton(options, gl);
+  mountButtons(options, gl, (picked) => {
+    kind = picked;
+  });
 
   return {
     get presenting() {
@@ -278,7 +306,12 @@ export function createXrMode(options: XrModeOptions): XrMode {
       return heading;
     },
     eye,
-    diorama,
+    get kind() {
+      return kind;
+    },
+    get view() {
+      return view;
+    },
 
     poll(dt) {
       actions.clear();
@@ -287,8 +320,8 @@ export function createXrMode(options: XrModeOptions): XrMode {
       for (const action of controls.state.actions ?? []) actions.add(action);
 
       readHead();
-      diorama.turn(controls.turn);
-      heading = diorama.heading(headQuaternion);
+      view.turn(controls.turn);
+      heading = view.heading(headQuaternion);
 
       // The pointer: the right controller's ray against the dashboard. The
       // trigger presses whatever it is over, and builds when it is over
@@ -315,10 +348,10 @@ export function createXrMode(options: XrModeOptions): XrMode {
       hud.setControllersMissing(missingFor > MISSING_CONTROLLERS_GRACE);
     },
 
-    update(feet, dt) {
-      diorama.update(feet, head, dt, controls.state.zoom);
-      if (!dashboardPlaced && diorama.placed) {
-        hud.placeDashboard(diorama.anchor, head);
+    update(feet, aim, dt) {
+      view.update(feet, head, dt, controls.state.zoom);
+      if (!dashboardPlaced && view.placed) {
+        hud.placeDashboard(view.anchor, head);
         dashboardPlaced = true;
       }
       eye.copy(head);
@@ -326,13 +359,22 @@ export function createXrMode(options: XrModeOptions): XrMode {
 
       // Keep the haze where it is in world terms (fog runs in view space,
       // which is now real metres), and thin it out towards the board view:
-      // a model on a table has no aerial perspective.
+      // a model on a table has no aerial perspective. At life size, view
+      // space is world space, and the page's haze is right as it is.
       if (renderer.scene.fog instanceof THREE.FogExp2) {
-        renderer.scene.fog.density = (diorama.scale / extent) * clamp(1 - diorama.overview, 0, 1);
+        renderer.scene.fog.density =
+          kind === "firstPerson" ? pageFog : (view.scale / extent) * clamp(1 - view.overview, 0, 1);
       }
 
       hud.setTutorial(tutorial.current?.vrText ?? null);
-      hud.placeLabel(feet, eye, diorama.scale);
+      if (kind === "firstPerson") {
+        // Over the character's head is behind the player's eyes; over the
+        // spot they are about to build on is where they are looking.
+        labelAt.set(aim.x, feet.y + AIM_LABEL_HEIGHT_M, aim.z);
+        hud.floatLabel(labelAt, eye, Math.max(1, eye.distanceTo(labelAt) / LABEL_READ_DISTANCE_M));
+      } else {
+        hud.placeLabel(feet, eye, view.scale);
+      }
       hud.update();
 
       // Last, once the rig has stopped moving for this frame: what three
@@ -357,57 +399,89 @@ export function createXrMode(options: XrModeOptions): XrMode {
 }
 
 /**
- * The page's "Enter VR" button, shown only where an immersive session can
- * actually start — so not on a desktop with no headset attached, and not in a
- * browser without WebXR at all.
+ * The page's "Enter VR" buttons, one for each view, shown only where an
+ * immersive session can actually start — so not on a desktop with no headset
+ * attached, and not in a browser without WebXR at all.
  */
-function mountButton(options: XrModeOptions, gl: THREE.WebGLRenderer): void {
+function mountButtons(
+  options: XrModeOptions,
+  gl: THREE.WebGLRenderer,
+  pick: (kind: XrViewKind) => void,
+): void {
   const xr = navigator.xr;
   if (!xr) return;
 
-  const button = document.createElement("button");
-  button.type = "button";
-  button.className = "hud__vr";
+  const group = document.createElement("div");
+  group.className = "hud__vr";
+  group.setAttribute("role", "group");
+  const caption = document.createElement("span");
+  caption.className = "hud__vr-caption";
+  group.append(caption);
+
+  const VIEWS: { kind: XrViewKind; label: MessageKey; hint: MessageKey }[] = [
+    { kind: "tabletop", label: "vr.tabletop", hint: "vr.tabletopHint" },
+    { kind: "firstPerson", label: "vr.firstPerson", hint: "vr.firstPersonHint" },
+  ];
+  const buttons = VIEWS.map(({ kind, label, hint }) => {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "hud__vr-button";
+    button.dataset.view = kind;
+    button.addEventListener("click", () => {
+      if (gl.xr.isPresenting) return;
+      pick(kind);
+      for (const other of buttons) other.button.disabled = true;
+      enter(xr, gl, options).finally(() => {
+        for (const other of buttons) other.button.disabled = false;
+      });
+    });
+    group.append(button);
+    return { button, label, hint };
+  });
+
   const relabel = (): void => {
-    button.textContent = t("vr.enter");
+    caption.textContent = t("vr.enter");
+    group.setAttribute("aria-label", t("vr.enter"));
+    for (const { button, label, hint } of buttons) {
+      button.textContent = t(label);
+      button.title = t(hint);
+    }
   };
   relabel();
   onLocaleChange(relabel);
-  button.hidden = true;
-  options.buttonHost.append(button);
+  group.hidden = true;
+  options.buttonHost.append(group);
 
   const check = (): void => {
     xr.isSessionSupported("immersive-vr")
       .then((supported) => {
-        button.hidden = !supported;
+        group.hidden = !supported;
       })
       .catch(() => {
-        button.hidden = true;
+        group.hidden = true;
       });
   };
   check();
   // A headset plugged in (or Link started) after the page loaded.
   xr.addEventListener("devicechange", check);
+}
 
-  button.addEventListener("click", () => {
-    if (gl.xr.isPresenting) return;
-    button.disabled = true;
-    xr.requestSession("immersive-vr", {
+/** Start an immersive session. Settles once it has started, or failed to. */
+function enter(xr: XRSystem, gl: THREE.WebGLRenderer, options: XrModeOptions): Promise<void> {
+  return xr
+    .requestSession("immersive-vr", {
       optionalFeatures: ["local-floor", "bounded-floor", "layers"],
     })
-      .then(async (session) => {
-        // Floor-relative where the runtime offers it, so the table can be
-        // placed from the player's own eye height; head-relative otherwise.
-        const features = session.enabledFeatures;
-        gl.xr.setReferenceSpaceType(!features || features.includes("local-floor") ? "local-floor" : "local");
-        await gl.xr.setSession(session);
-      })
-      .catch((error: unknown) => {
-        console.error(error);
-        options.notify(t("toast.vrFailed"));
-      })
-      .finally(() => {
-        button.disabled = false;
-      });
-  });
+    .then(async (session) => {
+      // Floor-relative where the runtime offers it, so the table — or the
+      // character's eye height — can be set from the player's own; head-
+      // relative otherwise.
+      const features = session.enabledFeatures;
+      gl.xr.setReferenceSpaceType(!features || features.includes("local-floor") ? "local-floor" : "local");
+      await gl.xr.setSession(session);
+    })
+    .catch((error: unknown) => {
+      console.error(error);
+      options.notify(t("toast.vrFailed"));
+    });
 }

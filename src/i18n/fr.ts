@@ -170,6 +170,10 @@ export const fr: Messages = {
   "chart.noChange": "aucun changement mesurable",
 
   "vr.enter": "Entrer en VR",
+  "vr.tabletop": "Table",
+  "vr.tabletopHint": "Le bassin versant en maquette sur une table devant vous",
+  "vr.firstPerson": "Première personne",
+  "vr.firstPersonHint": "Parcourez le bassin versant grandeur nature, avec les yeux de votre personnage",
   "vr.wood": "Bois {count}",
   "vr.stone": "Pierre {count}",
   "vr.spade": "Bêche",
@@ -185,5 +189,7 @@ export const fr: Messages = {
   "vr.exit": "Quitter la VR",
   "vr.controls":
     "Joystick gauche marcher · gâchette gauche courir · A ou gâchette construire · B ramasser · X / Y carte des risques · poignées changer d’outil · joystick droit tourner et zoomer",
+  "vr.controlsFirstPerson":
+    "Joystick gauche marcher · gâchette gauche courir · A ou gâchette construire · B ramasser · X / Y carte des risques · poignées changer d’outil · joystick droit tourner",
   "vr.pickUpControllers": "Prenez vos manettes pour jouer",
 };

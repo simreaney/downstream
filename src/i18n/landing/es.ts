@@ -114,7 +114,7 @@ export const es: LandingMessages = {
   "vr.eyebrow": "En RV",
   "vr.title": "Pon la cuenca sobre una mesa",
   "vr.intro":
-    "En un visor Meta Quest, Downstream se convierte en el diorama que su estilo imita. Abre el juego en el navegador del visor y pulsa <strong>Entrar en RV</strong>: la cuenca se encoge sobre una mesa delante de ti, tu personaje está de pie sobre ella y miras alrededor moviendo la cabeza.",
+    "En un visor Meta Quest, Downstream se convierte en el diorama que su estilo imita. Abre el juego en el navegador del visor y pulsa <strong>Mesa</strong>, junto a <strong>Entrar en RV</strong>: la cuenca se encoge sobre una mesa delante de ti, tu personaje está de pie sobre ella y miras alrededor moviendo la cabeza. O pulsa <strong>Primera persona</strong> para recorrerla a tamaño real, con los ojos de tu personaje.",
 
   "vr.table.caption": "En la mesa, apuntando al panel",
   "vr.table.alt":
@@ -133,6 +133,14 @@ export const es: LandingMessages = {
   "vr.board.title": "Todo el modelo, al alcance de la mano",
   "vr.board.body":
     "Empuja el stick derecho y la cuenca se queda sobre la mesa como una maqueta de unos 1,4 m de ancho, sobre su propio pedestal, con el mapa de riesgo superpuesto. Acércate para seguir un arroyo desde la cresta hasta la salida, o agáchate para ver el perfil del valle en el lateral de la maqueta.",
+  "vr.fp.label": "Downstream en RV, en la vista en primera persona",
+  "vr.fp.download": "Descargar el clip (MP4)",
+  "vr.fp.step": "Primera persona",
+  "vr.fp.title": "O plántate en el valle",
+  "vr.fp.body":
+    "Pulsa <strong>Primera persona</strong> y la cuenca tiene tamaño real: la ves con los ojos de tu personaje, a su altura, estés sentado o de pie. Mira hacia abajo y el punto de construcción está a unos pasos, con el indicador flotando encima; el panel espera abajo a tu izquierda.",
+  "vr.fp.body2":
+    "Al caminar se mueve tu vista, así que exige más a tu estómago que la mesa. Los giros siguen siendo a saltos y el horizonte nunca se inclina.",
 
   "vr.controllers": "Mandos Touch",
   "vr.walk.pad": "Stick izquierdo",

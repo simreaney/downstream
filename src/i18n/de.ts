@@ -162,6 +162,10 @@ export const de: Messages = {
   "chart.noChange": "keine messbare Änderung",
 
   "vr.enter": "VR starten",
+  "vr.tabletop": "Tisch",
+  "vr.tabletopHint": "Das Einzugsgebiet als Modell auf einem Tisch vor dir",
+  "vr.firstPerson": "Ego-Perspektive",
+  "vr.firstPersonHint": "Durchs Einzugsgebiet in Lebensgröße laufen, mit den Augen deiner Figur",
   "vr.wood": "Holz {count}",
   "vr.stone": "Stein {count}",
   "vr.spade": "Spaten",
@@ -177,5 +181,7 @@ export const de: Messages = {
   "vr.exit": "VR beenden",
   "vr.controls":
     "Linker Stick gehen · linker Trigger rennen · A oder Trigger bauen · B sammeln · X / Y Risikokarte · Griffe Werkzeug wechseln · rechter Stick drehen und zoomen",
+  "vr.controlsFirstPerson":
+    "Linker Stick gehen · linker Trigger rennen · A oder Trigger bauen · B sammeln · X / Y Risikokarte · Griffe Werkzeug wechseln · rechter Stick drehen",
   "vr.pickUpControllers": "Nimm die Controller in die Hand, um zu spielen",
 };

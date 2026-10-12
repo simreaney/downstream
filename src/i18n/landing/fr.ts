@@ -122,7 +122,7 @@ export const fr: LandingMessages = {
   "vr.eyebrow": "En VR",
   "vr.title": "Posez le bassin versant sur une table",
   "vr.intro":
-    "Sur Meta Quest, Downstream devient le diorama qu’il imite. Ouvrez le jeu dans le navigateur du casque et appuyez sur <strong>Entrer en VR</strong>\u00a0: le bassin versant se réduit sur une table devant vous, votre personnage s’y tient, et vous regardez autour de vous en bougeant la tête.",
+    "Sur Meta Quest, Downstream devient le diorama qu’il imite. Ouvrez le jeu dans le navigateur du casque et appuyez sur <strong>Table</strong>, à côté de <strong>Entrer en VR</strong>\u00a0: le bassin versant se réduit sur une table devant vous, votre personnage s’y tient, et vous regardez autour de vous en bougeant la tête. Ou appuyez sur <strong>Première personne</strong> pour le parcourir grandeur nature, avec les yeux de votre personnage.",
 
   "vr.table.caption": "À la table, en visant le panneau",
   "vr.table.alt":
@@ -141,6 +141,14 @@ export const fr: LandingMessages = {
   "vr.board.title": "Tout le modèle, à portée de main",
   "vr.board.body":
     "Poussez le stick droit et le bassin versant se pose sur la table comme une maquette d’environ 1,4 m de large, sur son propre socle, avec la carte des risques par-dessus. Penchez-vous pour suivre un ruisseau de la crête à l’exutoire, ou accroupissez-vous pour voir le profil de la vallée sur le côté de la maquette.",
+  "vr.fp.label": "Downstream en VR, en vue à la première personne",
+  "vr.fp.download": "Télécharger l’extrait (MP4)",
+  "vr.fp.step": "Première personne",
+  "vr.fp.title": "Ou plantez-vous dans la vallée",
+  "vr.fp.body":
+    "Appuyez plutôt sur <strong>Première personne</strong> et le bassin versant est grandeur nature\u00a0: vous le voyez avec les yeux de votre personnage, à sa hauteur, assis ou debout. Baissez les yeux\u00a0: l’emplacement de construction est à quelques pas, avec l’indicateur qui flotte au-dessus\u00a0; le panneau attend en bas à votre gauche.",
+  "vr.fp.body2":
+    "En marchant, votre vue se déplace\u00a0: c’est plus éprouvant pour l’estomac que la table. Les rotations restent par paliers, et l’horizon ne penche jamais.",
 
   "vr.controllers": "Manettes Touch",
   "vr.walk.pad": "Stick gauche",
