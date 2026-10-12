@@ -1,0 +1,61 @@
+{
+  "name": "downstream-desktop",
+  "productName": "Downstream",
+  "version": "0.1.0",
+  "description": "Desktop build of Downstream, a catchment restoration game",
+  "author": "Sim Reaney",
+  "license": "MIT",
+  "private": true,
+  "main": "main.cjs",
+  "repository": "github:simreaney/downstream",
+  "scripts": {
+    "prepare-app": "node prepare-app.mjs",
+    "start": "npm run prepare-app && electron .",
+    "dist": "npm run prepare-app && electron-builder --publish never"
+  },
+  "devDependencies": {
+    "electron": "44.7.0",
+    "electron-builder": "26.15.3"
+  },
+  "build": {
+    "appId": "uk.ac.durham.downstream",
+    "productName": "Downstream",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "main.cjs",
+      "package.json",
+      "app/**",
+      "!app/media/**",
+      "!app/**/*.map"
+    ],
+    "artifactName": "Downstream-${version}-${os}-${arch}.${ext}",
+    "win": {
+      "target": [
+        "portable",
+        "nsis"
+      ]
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "artifactName": "Downstream-${version}-win-${arch}-setup.${ext}"
+    },
+    "mac": {
+      "category": "public.app-category.educational-games",
+      "target": [
+        "dmg",
+        "zip"
+      ],
+      "identity": null
+    },
+    "linux": {
+      "category": "Game",
+      "target": [
+        "AppImage"
+      ]
+    },
+    "publish": null
+  }
+}

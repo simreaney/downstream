@@ -1,0 +1,79 @@
+name: Desktop builds
+
+# Packages the web game with Electron (see desktop/) into a Windows .exe, a
+# macOS .app (as .dmg and .zip) and a Linux AppImage.
+#
+# Run it by hand from the Actions tab to get the builds as workflow artifacts,
+# or push a `v*` tag to also attach them to a GitHub release for that tag.
+on:
+  workflow_dispatch:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: read
+
+jobs:
+  package:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            target: --win --x64
+          - os: macos-latest
+            # Both architectures, so the .app runs on Apple silicon and Intel Macs.
+            target: --mac --arm64 --x64
+          - os: ubuntu-latest
+            target: --linux --x64
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            desktop/package-lock.json
+
+      - name: Build the web game
+        run: |
+          npm ci
+          npm run build
+
+      - name: Package with Electron
+        working-directory: desktop
+        env:
+          # Builds are unsigned: no certificate is configured, so don't let
+          # electron-builder go looking for one in the keychain.
+          CSC_IDENTITY_AUTO_DISCOVERY: "false"
+        run: |
+          npm ci
+          npm run prepare-app
+          npx electron-builder ${{ matrix.target }} --publish never
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: downstream-${{ runner.os }}
+          path: |
+            desktop/release/*.exe
+            desktop/release/*.dmg
+            desktop/release/*.zip
+            desktop/release/*.AppImage
+          if-no-files-found: error
+
+  release:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: package
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: release
+          merge-multiple: true
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: release/*

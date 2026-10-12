@@ -232,8 +232,11 @@ export function readShareCode(): string | null {
   return fragment.startsWith("s=") ? fragment.slice(2) : null;
 }
 
+/** Where the desktop build points share links, since its `app://` URL only opens on the sharer's machine. */
+const PUBLIC_PLAY_URL = "https://simreaney.github.io/downstream/play/";
+
 export function shareUrl(code: string): string {
-  const url = new URL(window.location.href);
+  const url = new URL(window.location.protocol === "app:" ? PUBLIC_PLAY_URL : window.location.href);
   url.hash = `s=${code}`;
   // The seed lives in the code, so a stale query parameter would contradict it.
   url.searchParams.delete("seed");
