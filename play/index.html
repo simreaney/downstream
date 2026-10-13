@@ -8,11 +8,11 @@
       name="description"
       content="Explore a procedurally generated catchment and repair it with ponds, leaky dams and riparian trees, guided by a live SCIMAP risk map."
     />
-    <!-- Inline so there is no favicon request to 404 on a subpath deploy. -->
-    <link
-      rel="icon"
-      href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><text y='26' font-size='26'>🏞️</text></svg>"
-    />
+    <!-- Vite rewrites this to a hashed file under `base`, so the request
+         resolves on the subpath deploy. It is a trimmed copy of the
+         app icon, desktop/build/icon.svg, without the drop shadow, margin and
+         water highlights that blur at tab size. -->
+    <link rel="icon" type="image/svg+xml" href="/src/ui/favicon.svg" />
     <link rel="stylesheet" href="/src/ui/styles.css" />
   </head>
   <body>
