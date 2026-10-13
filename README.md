@@ -249,6 +249,10 @@ Share links made in the desktop build point at the GitHub Pages copy, since the
 `app://` URL only opens on the machine that made it. The landing page's videos
 are left out of the package; the app opens straight into the game.
 
+The app icon is drawn in `desktop/build/icon.svg`; after editing it, run
+`npm run icons` in `desktop/` to regenerate `icon.png`, which electron-builder
+turns into the Windows `.ico` and macOS `.icns`.
+
 The builds are not code-signed. Windows SmartScreen will warn on first launch
 ("More info" → "Run anyway"), and macOS will refuse to open the app until it is
 right-clicked → **Open** once (or `xattr -cr Downstream.app`). Signing needs an

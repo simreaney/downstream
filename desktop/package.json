@@ -11,7 +11,8 @@
   "scripts": {
     "prepare-app": "node prepare-app.mjs",
     "start": "npm run prepare-app && electron .",
-    "dist": "npm run prepare-app && electron-builder --publish never"
+    "dist": "npm run prepare-app && electron-builder --publish never",
+    "icons": "node render-icon.mjs"
   },
   "devDependencies": {
     "electron": "44.7.0",
@@ -21,7 +22,8 @@
     "appId": "uk.ac.durham.downstream",
     "productName": "Downstream",
     "directories": {
-      "output": "release"
+      "output": "release",
+      "buildResources": "build"
     },
     "files": [
       "main.cjs",
