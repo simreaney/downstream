@@ -7,12 +7,14 @@
  * corrupt or future code fails loudly rather than loading a half-world.
  */
 
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   MIN_SAVE_VERSION,
   SAVE_VERSION,
   deserialise,
+  pageUrl,
   serialise,
+  shareUrl,
   type SaveData,
 } from "../../src/game/save";
 import type { Intervention } from "../../src/game/interventions";
@@ -159,5 +161,26 @@ describe("save round trip", () => {
     const original = save({ sizeId: "large" });
     const restored = await deserialise(await serialise(original));
     expect(restored.sizeId).toBe("large");
+  });
+});
+
+describe("save links", () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  const at = (href: string) => vi.stubGlobal("window", { location: new URL(href) });
+
+  it("shares the page's own address in the browser, minus a stale seed", () => {
+    at("https://simreaney.github.io/downstream/play/?seed=7&lang=de");
+    const expected = "https://simreaney.github.io/downstream/play/?lang=de#s=abc";
+    expect(shareUrl("abc")).toBe(expected);
+    expect(pageUrl("abc")).toBe(expected);
+  });
+
+  it("shares the public game from the desktop build, but keeps history on app://", () => {
+    // history.replaceState throws on another origin, so the page URL must not
+    // follow the share link off app://.
+    at("app://downstream/downstream/play/?seed=7");
+    expect(shareUrl("abc")).toBe("https://simreaney.github.io/downstream/play/#s=abc");
+    expect(pageUrl("abc")).toBe("app://downstream/downstream/play/#s=abc");
   });
 });

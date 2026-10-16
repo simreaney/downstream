@@ -221,3 +221,41 @@ the branch, Pages publishes the unbuilt `index.html`, which loads nothing.
 `base` in `vite.config.ts` must match the repository subpath, `/downstream/`. A
 wrong `base` breaks every asset, most visibly the module worker, which 404s and
 leaves the game on the loading screen with nothing useful in the console.
+
+## Desktop builds
+
+`desktop/` wraps the same web build in Electron, so the game can be handed out as
+a Windows `.exe`, a macOS `.app` or a Linux AppImage that runs offline.
+`.github/workflows/desktop.yml` builds all three: run it from the Actions tab to
+get them as workflow artifacts, or push a `v*` tag (for example `v0.1.0`) to
+attach them to a GitHub release. On Windows there is both a portable `.exe` and
+an installer.
+
+To build or run one locally, from the repository root:
+
+```sh
+npm run build
+cd desktop
+npm ci
+npm start      # run the game in an Electron window
+npm run dist   # package for the current OS into desktop/release/
+```
+
+Both copy `../dist` into `desktop/app/` first, so rebuild the web game after a change.
+
+The game is served over an `app://` scheme rather than `file://`, because
+Chromium refuses module workers from `file://` and the simulation runs in one.
+Share links made in the desktop build point at the GitHub Pages copy, since the
+`app://` URL only opens on the machine that made it. The landing page's videos
+are left out of the package; the app opens straight into the game.
+
+The app icon is drawn in `desktop/build/icon.svg`; after editing it, run
+`npm run icons` in `desktop/` to regenerate `icon.png`, which electron-builder
+turns into the Windows `.ico` and macOS `.icns`.
+
+The builds are not code-signed. Windows SmartScreen will warn on first launch
+("More info" → "Run anyway"), and macOS will refuse to open the app until it is
+right-clicked → **Open** once (or `xattr -cr Downstream.app`). Signing needs an
+Apple Developer ID and a Windows code-signing certificate added as repository
+secrets; see the electron-builder code-signing docs.
+

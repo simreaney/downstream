@@ -17,6 +17,7 @@ import {
   readShareCode,
   readStoredCode,
   deserialise,
+  pageUrl,
   saveToStorage,
   shareUrl,
   type SaveData,
@@ -547,8 +548,8 @@ async function boot(): Promise<void> {
 
       void saveToStorage(data)
         .then(async (code) => {
+          window.history.replaceState(null, "", pageUrl(code));
           const url = shareUrl(code);
-          window.history.replaceState(null, "", url);
           // Best effort: clipboard access needs a permission some browsers only
           // grant on a user gesture, and a failed copy must not lose the save.
           try {

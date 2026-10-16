@@ -10,3 +10,7 @@ dist/
 # Editor and OS clutter.
 .DS_Store
 *.local
+
+# Desktop (Electron) build: the copied web build and the packaged installers.
+desktop/app/
+desktop/release/

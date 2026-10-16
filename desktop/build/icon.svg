@@ -1,0 +1,58 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024">
+  <!--
+    Downstream app icon: a river widening as it runs down through green hills,
+    with a sapling on the bank. Colours come from the game's palette
+    (src/ui/styles.css, src/render/sky.ts, src/render/waterMaterial.ts).
+    The tile sits on Apple's 824px icon grid with a transparent margin;
+    run `npm run icons` in desktop/ after editing to regenerate icon.png.
+  -->
+  <defs>
+    <clipPath id="tile">
+      <rect x="100" y="100" width="824" height="824" rx="185"/>
+    </clipPath>
+    <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#a9d2ee"/>
+      <stop offset="1" stop-color="#f5ecdc"/>
+    </linearGradient>
+    <linearGradient id="river" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#a9e0e2"/>
+      <stop offset="1" stop-color="#5f9fd3"/>
+    </linearGradient>
+    <filter id="shadow" x="-10%" y="-10%" width="120%" height="125%">
+      <feDropShadow dx="0" dy="14" stdDeviation="16" flood-color="#3d3226" flood-opacity="0.28"/>
+    </filter>
+  </defs>
+
+  <g filter="url(#shadow)">
+    <g clip-path="url(#tile)">
+      <rect x="100" y="100" width="824" height="824" fill="url(#sky)"/>
+      <!-- Sun -->
+      <circle cx="728" cy="268" r="70" fill="#fdf6e3"/>
+      <!-- Far hills -->
+      <path d="M100 470 C 230 360, 360 360, 470 430 C 580 500, 700 340, 924 400 L924 924 L100 924 Z" fill="#8fcc9f"/>
+      <!-- Near hills -->
+      <path d="M100 560 C 250 480, 400 520, 520 560 C 650 600, 780 500, 924 540 L924 924 L100 924 Z" fill="#4fb286"/>
+      <!-- Foreground bank -->
+      <path d="M100 720 C 260 660, 420 700, 560 740 C 700 780, 820 720, 924 740 L924 924 L100 924 Z" fill="#2f7d5c"/>
+      <!-- River: narrow at its source, wide downstream -->
+      <path d="M492 438
+               C 470 500, 560 520, 548 575
+               C 534 640, 380 650, 372 740
+               C 364 830, 520 880, 560 924
+               L 860 924
+               C 760 860, 560 830, 580 750
+               C 598 680, 700 640, 660 570
+               C 628 515, 520 500, 508 438 Z"
+            fill="url(#river)"/>
+      <!-- Highlights on the water -->
+      <path d="M596 612 C 580 640, 556 660, 530 676" stroke="#fbfdff" stroke-width="14" stroke-linecap="round" fill="none" opacity="0.75"/>
+      <path d="M440 790 C 460 820, 490 840, 530 858" stroke="#fbfdff" stroke-width="14" stroke-linecap="round" fill="none" opacity="0.75"/>
+      <!-- Sapling on the bank -->
+      <rect x="250" y="660" width="26" height="120" rx="13" fill="#5a4a38"/>
+      <circle cx="263" cy="618" r="86" fill="#1f5e43"/>
+      <circle cx="263" cy="610" r="78" fill="#8fd6a8"/>
+      <circle cx="238" cy="636" r="48" fill="#6cc497"/>
+      <circle cx="288" cy="584" r="30" fill="#c2ecd0"/>
+    </g>
+  </g>
+</svg>
