@@ -235,10 +235,24 @@ export function readShareCode(): string | null {
 /** Where the desktop build points share links, since its `app://` URL only opens on the sharer's machine. */
 const PUBLIC_PLAY_URL = "https://simreaney.github.io/downstream/play/";
 
-export function shareUrl(code: string): string {
-  const url = new URL(window.location.protocol === "app:" ? PUBLIC_PLAY_URL : window.location.href);
+function withShareCode(base: string, code: string): string {
+  const url = new URL(base);
   url.hash = `s=${code}`;
   // The seed lives in the code, so a stale query parameter would contradict it.
   url.searchParams.delete("seed");
   return url.toString();
+}
+
+/**
+ * This page's own address carrying the save, for `history.replaceState`.
+ * It must stay same-origin: history throws on any other origin, which the
+ * desktop build's share link always is.
+ */
+export function pageUrl(code: string): string {
+  return withShareCode(window.location.href, code);
+}
+
+/** The link to hand out. In the browser it is the page's own address; in the desktop build, the public game's. */
+export function shareUrl(code: string): string {
+  return withShareCode(window.location.protocol === "app:" ? PUBLIC_PLAY_URL : window.location.href, code);
 }
