@@ -44,10 +44,15 @@ export function createRenderer(canvas: HTMLCanvasElement): Renderer {
   // surfaces land just under 1.0 rather than clipping.
   gl.toneMapping = THREE.NoToneMapping;
   gl.shadowMap.enabled = true;
-  // PCF with a wide filter radius (set on the light) rather than the old soft
-  // variant, which three now maps onto this anyway: the radius is what gives the
-  // faint, feathered overcast-day shadows the art direction asks for.
-  gl.shadowMap.type = THREE.PCFShadowMap;
+  // Variance shadows, blurred over a wide radius (set on the light), for the
+  // faint, feathered overcast-day shadows the art direction asks for. This was
+  // PCF, which three implements as five taps on a disc rotated by per-pixel
+  // noise. At the six-texel radius the softness needs, five taps leave gaps,
+  // and the noise filling them showed as grain and moire rings in every
+  // shadow, worst in the one under the player. A variance map is blurred as
+  // an image, in two passes over the map, so wide costs the same as narrow
+  // and the result is smooth.
+  gl.shadowMap.type = THREE.VSMShadowMap;
   // Lets a headset session take over the loop below; costs nothing until one
   // starts. Everything specific to VR lives in `xr/`.
   gl.xr.enabled = true;

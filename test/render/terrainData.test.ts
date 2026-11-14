@@ -11,6 +11,7 @@
 
 import { describe, expect, it } from "vitest";
 import type { GridSpec } from "../../src/core/grid";
+import { SUN_OFFSET } from "../../src/render/lighting";
 import { bakeTerrainData } from "../../src/render/terrainData";
 import { channelThresholdCells } from "../../src/scimap/constants";
 
@@ -27,6 +28,11 @@ function opennessAt(data: Uint8Array, col: number, row: number): number {
 /** Wetness, read back out of the green channel as 0..1. */
 function wetnessAt(data: Uint8Array, col: number, row: number): number {
   return data[cellAt(col, row) * 4 + 1] / 255;
+}
+
+/** Relief, read back out of the blue channel as -1..1, with 0 as flat ground. */
+function reliefAt(data: Uint8Array, col: number, row: number): number {
+  return (data[cellAt(col, row) * 4 + 2] - 128) / 127;
 }
 
 function bake(dem: Float32Array, accum = new Float32Array(CELLS).fill(1)): Uint8Array {
@@ -69,6 +75,39 @@ describe("bakeTerrainData", () => {
     const data = bake(new Float32Array(CELLS).fill(20));
     expect(opennessAt(data, 0, 0)).toBe(1);
     expect(opennessAt(data, SPEC.width - 1, SPEC.height - 1)).toBe(1);
+  });
+
+  it("leaves flat ground with no relief tint, edges included", () => {
+    // Exactly zero, not nearly: flat ground is most of what the player walks
+    // on, and a rounding error here is a tint over the whole valley floor.
+    const data = bake(new Float32Array(CELLS).fill(20));
+    expect(reliefAt(data, 32, 32)).toBe(0);
+    expect(reliefAt(data, 0, 0)).toBe(0);
+    expect(reliefAt(data, SPEC.width - 1, SPEC.height - 1)).toBe(0);
+  });
+
+  it("tints the slope facing the sun warm and the one facing away cool", () => {
+    // A ridge running north-south. The sun stands to the west (negative x),
+    // so the western flank faces it. Upside down, this would light every
+    // hillside from the side its shadow falls on.
+    expect(SUN_OFFSET[0]).toBeLessThan(0);
+    const dem = new Float32Array(CELLS);
+    for (let row = 0; row < SPEC.height; row++) {
+      for (let col = 0; col < SPEC.width; col++) {
+        dem[cellAt(col, row)] = 60 - Math.abs(col - 32) * 0.8;
+      }
+    }
+
+    const data = bake(dem);
+    const sunward = reliefAt(data, 16, 32);
+    const away = reliefAt(data, 48, 32);
+
+    expect(sunward).toBeGreaterThan(0.1);
+    expect(away).toBeLessThan(-0.1);
+    // An 11-degree slope is this catchment's ordinary hillside. It has to
+    // move the tint visibly without using the whole range up, or steeper
+    // ground has nowhere left to go.
+    expect(Math.abs(away)).toBeLessThan(1);
   });
 
   it("ramps wetness from dry hillslope to the channel threshold", () => {

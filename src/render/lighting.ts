@@ -4,7 +4,8 @@
  * Lit like a bright overcast day. Almost all of the light comes from the
  * hemisphere — a warm white sky above and a soft sunlit-meadow bounce below —
  * and the directional sun is kept weak, there to give forms a gentle roll and
- * to cast a faint, feathered shadow, never a hard dark one. With the smooth
+ * to cast a faint, feathered shadow, never a hard dark one. (The landform
+ * itself is modelled by a baked relief tint instead; see `terrainData.ts`.) With the smooth
  * high-floored ramp in `toonRamp.ts`, that is what keeps the whole world
  * high-key and approachable: nothing in it is ever lit from one side and black
  * on the other.
@@ -34,8 +35,9 @@ const SHADOW_RADIUS_PER_CAMERA_M = 2.4;
 /**
  * Shadow map resolution, halved on low-power devices.
  *
- * Shadows here are deliberately blurred by a wide PCF radius, so the fallback
- * costs almost nothing visually and a quarter of the shadow pass.
+ * Shadows here are deliberately blurred over a wide radius, so the fallback
+ * costs almost nothing visually and a quarter of the shadow pass, blur
+ * included.
  */
 const SHADOW_MAP_SIZE = isLowPower() ? 1024 : 2048;
 
@@ -46,12 +48,30 @@ const SHADOW_MAP_SIZE = isLowPower() ? 1024 : 2048;
  * shadow on grass reads as a soft cool patch — present, grounding, and nowhere
  * near the pools of dark green the previous lighting put under every wood.
  */
-const SHADOW_INTENSITY = 0.5;
+const SHADOW_INTENSITY = 0.45;
 
-/** PCF filter radius, in shadow-map texels. Wide, for overcast-soft edges. */
+/**
+ * Blur radius of the variance shadow map, in texels. Wide, for overcast-soft
+ * edges. See `renderer.ts` for why the map is a variance one.
+ */
 const SHADOW_SOFTNESS = 6;
 
 const SUN_COLOUR = 0xfff3e2;
+
+/**
+ * Where the sun stands relative to what it lights, in metres.
+ *
+ * About 42 degrees up. Higher reads more overcast, but with the camera
+ * looking down on the landscape it also lights every gentle slope the same,
+ * and the valley goes flat; at this height slopes facing away from the sun
+ * roll softly darker, while the faint, feathered shadows stay short enough to
+ * read as contact shading rather than silhouettes thrown across the ground.
+ *
+ * Exported because the baked relief shading in `terrainData.ts` has to agree
+ * with it: a hillside tinted as sunlit on the side the shadows fall towards
+ * reads as two suns.
+ */
+export const SUN_OFFSET: readonly [number, number, number] = [-150, 172, 120];
 const SUN_INTENSITY = 2.0;
 
 /**
@@ -82,12 +102,7 @@ export interface Lighting {
 
 export function createLighting(scene: THREE.Scene): Lighting {
   const sun = new THREE.DirectionalLight(SUN_COLOUR, SUN_INTENSITY);
-  // About 42 degrees up. Higher reads more overcast, but with the camera
-  // looking down on the landscape it also lights every gentle slope the same,
-  // and the valley goes flat; at this height slopes facing away from the sun
-  // roll softly darker, while the faint, feathered shadows stay short enough to
-  // read as contact shading rather than silhouettes thrown across the ground.
-  sun.position.set(-150, 172, 120);
+  sun.position.set(...SUN_OFFSET);
   sun.castShadow = true;
   sun.shadow.mapSize.set(SHADOW_MAP_SIZE, SHADOW_MAP_SIZE);
   sun.shadow.camera.near = 1;

@@ -412,12 +412,36 @@ argued at its call site. In summary:
 | Piece | Where | Why |
 |---|---|---|
 | Smooth, high-floored toon ramp | `toonRamp.ts` | Forms roll gently from lit to shaded, and no surface ever falls below about half brightness |
-| Hemisphere-dominated light, faint wide-PCF shadows | `lighting.ts` | Overcast-day evenness; a shadow tints the ground rather than blacking it out |
+| Hemisphere-dominated light, faint wide-blurred variance shadows | `lighting.ts`, `renderer.ts` | Overcast-day evenness; a shadow tints the ground rather than blacking it out |
+| Baked relief tint, warm sunward and cool away | `terrainData.ts`, `terrainMaterial.ts` | The ramp is nearly flat across this terrain's gentle slopes, so the landform is drawn as a colour shift from 3× exaggerated relief and nothing has to go dark |
 | Rim + broad sheen patch | `softFinish.ts` | The matte-vinyl finish, and what separates a prop from the ground without an outline |
 | Baked vertex AO on every prop | `softFinish.ts`, `props/types.ts` | Contact darkening and soft undersides for a few multiplies at load, with no screen-space pass |
 | Soft-nearest land cover | `terrainMaterial.ts` | Fields keep their own colour while the 4 m staircases round off; the risk overlay stays hard-nearest because it is data |
 | 34° FOV from 24 m at ~41° pitch, zoom 11–190 m | `renderer.ts`, `camera.ts` | Tabletop-miniature perspective; pitch stays oblique so the terrain still helps read the risk map |
 | Dithered sight-line cut-out | `occlusionFade.ts` | The high camera puts crowns between it and the player constantly; discard keeps every batch opaque and instanced |
+
+**Shadows are a variance map.** They were PCF, which three draws as five taps
+on a disc rotated by per-pixel noise. The softness the look needs is a
+six-texel radius, and at that width five taps leave gaps: the noise that fills
+them showed as grain and moiré rings in every shadow, most plainly the one
+under the player. A variance map is blurred as an image, so a wide blur costs
+the same as a narrow one and comes out smooth. Shadow strength came down from
+0.5 to 0.45 to match, since a clean shadow reads darker than a grainy one.
+
+**Water takes the green route to brown.** Clean water is blue and silt is
+caramel, which are near-complements, so a straight mix passes through grey.
+In-channel risk is stretched so the median reach sits mid-range, which put
+most of the river in that grey. With pale foam a quarter of the width on each
+bank and four-metre white streaks in lanes, a river read as a road. Now:
+
+- The colour runs blue, then a murky sage, then caramel.
+- The bank foam is a narrow lapping line.
+- The streaks are metre-long flecks.
+- Pin-point sparkle marks the surface as wet, thinning as silt rises.
+
+Floodwater thins to nothing over its first 10 cm of depth, where it used to be
+cut off at a single depth. That cut ran straight across each 4 m triangle, so
+the flood had a polygon for an edge.
 
 **Water flow.** Rivers draw foam flecks laid out in *travel time* along each
 reach, from a Manning-style velocity (`√slope`, scaled by width). Flecks

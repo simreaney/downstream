@@ -2,9 +2,10 @@
  * Floodwater, as one vertex-displaced plane over the whole catchment.
  *
  * A single mesh sharing the water material, with per-vertex depth uploaded from
- * the storm's playback frames. Fragments below a threshold discard, so dry
- * ground shows through and the flood has an edge that advances and retreats
- * rather than a rectangle that fades — one draw call for the entire event.
+ * the storm's playback frames. Fragments below a threshold discard and the
+ * water thins towards it, so dry ground shows through and the flood has a soft
+ * edge that advances and retreats rather than a rectangle that fades — one
+ * draw call for the entire event.
  *
  * The plane *is* the terrain grid: it shares the terrain mesh's position and
  * index buffers and lifts each vertex by its depth in the vertex shader. So
@@ -25,8 +26,19 @@ import type { GridSpec } from "../core/grid";
 /** Depth below which a fragment is discarded, in metres. */
 const VISIBLE_DEPTH_M = 0.025;
 
-/** Depth over which the advancing edge carries a pale foam line, in metres. */
-const EDGE_FOAM_DEPTH_M = 0.06;
+/**
+ * Depth by which the water has reached its full opacity, in metres.
+ *
+ * Between the two the sheet thins to nothing. Depth is interpolated across
+ * 4 m triangles, so a cut at a single depth runs dead straight across each
+ * one and turns a corner at every vertex: the flood's edge was a polygon.
+ * Fading over a range puts a gradient where the cut was, and shallow water
+ * showing the ground through it is also simply what shallow water does.
+ */
+const OPAQUE_DEPTH_M = 0.1;
+
+/** How far noise moves that fade, in metres of depth, so the margin is not a contour. */
+const EDGE_WOBBLE_M = 0.03;
 
 /**
  * Sheet-flow surface speed from ground slope, in metres per second.
@@ -133,14 +145,21 @@ export function createFloodPlane(
       .replace(
         "#include <dithering_fragment>",
         /* glsl */ `#include <dithering_fragment>
-        // A soft pale line along the advancing edge, so the flood reads as a
-        // gentle tide creeping over the grass rather than a stain spreading.
+        // 0 at the water's edge, 1 where it is deep enough to be opaque.
+        float cwFilled = smoothstep(
+          ${VISIBLE_DEPTH_M.toFixed(3)},
+          ${OPAQUE_DEPTH_M.toFixed(3)},
+          vDepth + (cwNoise(vWaterWorld * 0.6) - 0.5) * ${EDGE_WOBBLE_M.toFixed(3)}
+        );
+        // A soft pale band just inside the advancing edge, so the flood reads
+        // as a gentle tide creeping over the grass rather than a stain
+        // spreading.
         gl_FragColor.rgb = mix(
           gl_FragColor.rgb,
           vec3(0.98, 0.97, 0.94),
-          (1.0 - smoothstep(${VISIBLE_DEPTH_M.toFixed(3)}, ${EDGE_FOAM_DEPTH_M.toFixed(3)}, vDepth)) * 0.4
+          smoothstep(0.08, 0.3, cwFilled) * (1.0 - smoothstep(0.3, 0.75, cwFilled)) * 0.38
         );
-        gl_FragColor.a *= clamp(vDepth * 8.0, 0.72, 1.0);`,
+        gl_FragColor.a *= cwFilled;`,
       );
   };
   floodMaterial.customProgramCacheKey = () => "curved:flood";

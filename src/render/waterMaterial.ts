@@ -13,8 +13,8 @@
  *
  * Four layers, each answering a different question about the water:
  *
- * - **Flow streaks** (rivers only) — pale dashes in lanes down the channel,
- *   the classic toy-diorama river. They are laid out in *travel time*
+ * - **Foam flecks** (rivers only) — short pale flecks in lanes down the
+ *   channel, the classic toy-diorama river. They are laid out in *travel time*
  *   (`aTravel`, seconds from the head of the reach at the local velocity)
  *   rather than distance, so they move at the local speed and stretch out where
  *   the channel steepens, the way real tracers do. Centre lanes run faster than
@@ -25,6 +25,12 @@
  *   water, advected the same way as the ripples below, over a thinner haze.
  *   A laden reach keeps its water colour between plumes, so it reads as
  *   cloudy water rather than as a sandy path, and the drift shows direction.
+ *   The colour goes from blue to caramel by way of a murky sage green, not in
+ *   a straight line: see `MURKY_SHALLOW`.
+ * - **Sparkle** — pin-point glints that twinkle where two fine noise fields
+ *   cross, one riding the current and one drifting. It is the only sharp,
+ *   bright detail on the surface, and what says "wet" where everything else
+ *   says "blue".
  * - **Advected ripples** — soft value noise pushed along `aDir`, a world-space
  *   velocity, using the two-phase flow-map blend (two copies of the pattern half
  *   a cycle apart, crossfaded so neither's reset is ever visible). The river
@@ -44,10 +50,28 @@ import * as THREE from "three";
 import { applyCurvature, type CurvatureUniforms } from "./curvature";
 import { GLSL_NOISE, glslColour } from "./glsl";
 
-const SHALLOW = 0xa9e0e2;
-const DEEP = 0x7eb6e2;
-const SILT_SHALLOW = 0xe6d3a2;
-const SILT_DEEP = 0xcdb17c;
+const SHALLOW = 0x9fe2e0;
+const DEEP = 0x63b1e6;
+/**
+ * The colour of half-laden water: a murky sage.
+ *
+ * Blue and caramel are near-complements, so mixing them directly passes
+ * through grey — and in-channel risk is stretched so the median reach sits
+ * near the middle of the range. Most of the river was therefore drawn in the
+ * one colour the palette has no use for, and a pale grey ribbon with white
+ * dashes down it reads as a road. Real water takes the green route as it
+ * picks up sediment, and so does this: clean blue, then sage, then caramel.
+ */
+const MURKY_SHALLOW = 0xb7dcb4;
+const MURKY_DEEP = 0x8fc3a4;
+/**
+ * Fully laden water. A warm caramel, kept a clear step deeper than the tilled
+ * earth of an arable field (`COVER_COLOURS` in `terrainMaterial.ts`), which is
+ * the ground a silted river most often runs through — at the same value the
+ * two merge and the river disappears exactly where it matters most.
+ */
+const SILT_SHALLOW = 0xdcb98a;
+const SILT_DEEP = 0xc49a62;
 const FOAM = 0xfbfdff;
 const SKY_TINT = 0xeaf4fb;
 
@@ -78,12 +102,23 @@ const SILT_MAX = 0.8;
 const PLUME_FREQUENCY = 0.11;
 const PLUME_FLOOR = 0.42;
 
-/** Streak lanes across the channel. */
-const STREAK_LANES = 4;
+/** Fleck lanes across the channel. */
+const STREAK_LANES = 5;
 
-/** Seconds of travel time per streak cycle, and the fraction of a cycle that is dash. */
-const STREAK_PERIOD_S = 7.0;
-const STREAK_DUTY = 0.5;
+/**
+ * Seconds of travel time per fleck cycle, and the fraction of a cycle that is
+ * fleck.
+ *
+ * Short on both counts. At seven seconds and half a cycle each mark was four
+ * or five metres long and a hand's width across: a lane marking. At these
+ * values a fleck is about a metre of foam, and there are more of them.
+ */
+const STREAK_PERIOD_S = 2.6;
+const STREAK_DUTY = 0.34;
+
+/** Sparkle lattice, in reciprocal metres, and how much of the surface glints. */
+const SPARKLE_FREQUENCY = 4.5;
+const SPARKLE_STRENGTH = 0.7;
 
 /**
  * Visual speed-up on the model's velocities.
@@ -108,6 +143,7 @@ const RIPPLE_CYCLE_S = 3.0;
  * the player pulled back to watch a whole river run.
  */
 const STREAK_FADE_MPP: [number, number] = [0.1, 0.26];
+const SPARKLE_FADE_MPP: [number, number] = [0.05, 0.16];
 const RIPPLE_FADE_MPP: [number, number] = [0.45, 1.1];
 
 export interface WaterMaterial {
@@ -226,6 +262,7 @@ export function createWaterMaterial(
           float metresPerPixel = max(length(dFdx(vWaterWorld)), length(dFdy(vWaterWorld)));
           float streaksShown = 1.0 - smoothstep(${STREAK_FADE_MPP[0].toFixed(2)}, ${STREAK_FADE_MPP[1].toFixed(2)}, metresPerPixel);
           float ripplesShown = 1.0 - smoothstep(${RIPPLE_FADE_MPP[0].toFixed(2)}, ${RIPPLE_FADE_MPP[1].toFixed(2)}, metresPerPixel);
+          float sparkleShown = 1.0 - smoothstep(${SPARKLE_FADE_MPP[0].toFixed(2)}, ${SPARKLE_FADE_MPP[1].toFixed(2)}, metresPerPixel);
 
           // --- Advected ripples (two-phase flow map) ---
           float speed = length(vDir);
@@ -253,13 +290,17 @@ export function createWaterMaterial(
           // ribbon reads as a body of water with a bed rather than a painted stripe.
           float body = smoothstep(0.0, 0.85, depth);
           vec3 clean = mix(${glslColour(SHALLOW)}, ${glslColour(DEEP)}, body);
+          vec3 murky = mix(${glslColour(MURKY_SHALLOW)}, ${glslColour(MURKY_DEEP)}, body);
           vec3 laden = mix(${glslColour(SILT_SHALLOW)}, ${glslColour(SILT_DEEP)}, body);
           // Silt clouds the water rather than repainting it: a haze everywhere,
           // thickening into plumes. The water keeps its own hue between them,
           // so a laden reach reads as water carrying sediment — and the moving
           // plumes show which way it is carrying it.
           float cloud = silt * mix(${PLUME_FLOOR.toFixed(2)}, 1.0, smoothstep(0.3, 0.72, plume));
-          vec3 water = mix(clean, laden, cloud * ${SILT_MAX.toFixed(2)});
+          float load = cloud * ${SILT_MAX.toFixed(2)};
+          vec3 water = load < 0.5
+            ? mix(clean, murky, load * 2.0)
+            : mix(murky, laden, load * 2.0 - 1.0);
 
           // Soft light on the crests, soft shade in the troughs; stronger where
           // the water is moving, so a pond is calm and a riffle glitters.
@@ -267,6 +308,25 @@ export function createWaterMaterial(
           water *= 1.0 + (ripple - 0.5) * rippleStrength * 2.0;
           float glint = smoothstep(0.58, 0.8, ripple) * 0.32 * (1.0 - silt * 0.4) * mix(0.4, 1.0, ripplesShown);
           water = mix(water, ${glslColour(FOAM)}, glint);
+
+          // --- Sparkle ---
+          // Two fine fields, one carried by the current and one drifting
+          // against it; a glint is where both peak at once, so each lasts a
+          // moment and the set never repeats. Thinned over silt (cloudy water
+          // does not glitter) and near the banks.
+          {
+            vec2 sparkleAt = vWaterWorld * ${SPARKLE_FREQUENCY.toFixed(2)};
+            float carried = cwNoise(sparkleAt - (offsetA + offsetB) * 0.5 * ${SPARKLE_FREQUENCY.toFixed(2)} + drift * 2.0);
+            float crossing = cwNoise(sparkleAt * 1.37 + vec2(-0.9, 0.6) * uTime + 41.0);
+            // The product of two noises peaks rarely: this keeps a few percent
+            // of the surface, as points, where a lower threshold gave blotches.
+            float sparkle = smoothstep(0.56, 0.64, carried * crossing);
+            water = mix(
+              water,
+              ${glslColour(FOAM)},
+              sparkle * ${SPARKLE_STRENGTH.toFixed(2)} * sparkleShown * (1.0 - silt * 0.6) * (1.0 - smoothstep(0.6, 0.9, edge))
+            );
+          }
 
           // --- Flow streaks (rivers only; ponds and floods pass aTravel < 0) ---
           // Computed unconditionally and masked, because fwidth() inside a
@@ -300,25 +360,27 @@ export function createWaterMaterial(
             float dash = smoothstep(0.0, aa, u) * (1.0 - smoothstep(1.0 - aa, 1.0, u));
             float taper = sqrt(max(sin(u * 3.14159), 0.0));
             float wobble = (cwHash(vec2(slot, lane + 11.0)) - 0.5) * 0.5;
-            float across = 1.0 - smoothstep(0.02, 0.02 + 0.13 * taper, abs(laneF - 0.5 - wobble));
+            float across = 1.0 - smoothstep(0.04, 0.04 + 0.22 * taper, abs(laneF - 0.5 - wobble));
             float streak = dash * across * present * (1.0 - smoothstep(0.7, 0.92, edge)) * streaksShown
                          * step(0.0, vTravel);
-            water = mix(water, ${glslColour(FOAM)}, streak * mix(0.42, 0.3, silt));
+            water = mix(water, ${glslColour(FOAM)}, streak * mix(0.5, 0.34, silt));
           }
 
           // --- Soft banks ---
-          float foamLine = 0.72 + (ripple - 0.5) * 0.22;
-          float foam = smoothstep(foamLine, foamLine + 0.14, edge) * (1.0 - smoothstep(0.93, 1.0, edge));
-          water = mix(water, ${glslColour(FOAM)}, foam * mix(0.5, 0.3, silt));
+          // A narrow lapping line, not a margin: at a quarter of the width on
+          // each side, the foam was a pale kerb either side of the water.
+          float foamLine = 0.84 + (ripple - 0.5) * 0.16;
+          float foam = smoothstep(foamLine, foamLine + 0.07, edge) * (1.0 - smoothstep(0.95, 1.0, edge));
+          water = mix(water, ${glslColour(FOAM)}, foam * mix(0.6, 0.36, silt));
 
           // A little of the pale sky at grazing angles, for the soft sheen of a
           // surface rather than the flat colour of a floor.
           // abs(), because the material is double-sided and vNormal may face away.
           float fresnel = pow(1.0 - abs(dot(normalize(vViewPosition), normalize(vNormal))), 3.0);
-          water = mix(water, ${glslColour(SKY_TINT)}, fresnel * 0.3);
+          water = mix(water, ${glslColour(SKY_TINT)}, fresnel * 0.2);
 
           diffuseColor.rgb = water;
-          diffuseColor.a *= 1.0 - smoothstep(0.9, 1.0, edge);
+          diffuseColor.a *= 1.0 - smoothstep(0.93, 1.0, edge);
         }`,
       );
   };

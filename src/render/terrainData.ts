@@ -2,7 +2,7 @@
  * The fields the *look* of the ground is built from, as opposed to the fields
  * the model is built from.
  *
- * Two things the terrain shader needs and cannot work out per fragment:
+ * Three things the terrain shader needs and cannot work out per fragment:
  *
  * **Openness** — how much sky each cell can see. The shadow map covers only a
  * region around the player (see `lighting.ts`), so everything beyond it is lit as if
@@ -18,7 +18,17 @@
  * is worth more than the prettiness: the player has to find a watercourse to put
  * a leaky dam in, and before this the only way to do it was to open the map.
  *
- * Both are sampled with **linear** filtering, unlike the land-cover and overlay
+ * **Relief** — which way each slope faces relative to the sun, with the
+ * heights exaggerated first. The toon ramp is deliberately flat near full
+ * light (see `toonRamp.ts`), and this catchment's slopes average about twelve
+ * degrees, so between a hillside facing the sun and one facing away the ramp
+ * moves by a few percent: from the overview the valley reads as a printed map
+ * laid flat. This is the cartographer's answer to the same problem — shade
+ * the relief as if it were several times steeper than it is — and the shader
+ * spends it as a *colour* shift, warm on sunward slopes and cool on the far
+ * side, so the landform appears without anything going dark.
+ *
+ * All three are sampled with **linear** filtering, unlike the land-cover and overlay
  * textures next to them. That split is deliberate — crisp 4 m cells are right
  * for a data product the player is meant to read as data, and wrong for light,
  * which has no business being square.
@@ -28,6 +38,7 @@ import * as THREE from "three";
 import { clamp01 } from "../core/clamp";
 import type { GridSpec } from "../core/grid";
 import { channelThresholdCells } from "../scimap/constants";
+import { SUN_OFFSET } from "./lighting";
 
 /**
  * Azimuths sampled when scanning for the horizon.
@@ -82,6 +93,24 @@ const OPENNESS_FLOOR = 0.82;
  * the more useful picture and the one that does not fight the shading.
  */
 const WET_START_CELLS = 60;
+
+/**
+ * Vertical exaggeration applied to the terrain before relief shading.
+ *
+ * At 1 this would be ordinary Lambert shading, which the lights already do
+ * and which is the few-percent effect described above. Printed relief maps
+ * run between two and five times; three puts a twelve-degree hillside at the
+ * shading of a thirty-degree one, which is where slopes start to read as
+ * slopes from above.
+ */
+const RELIEF_EXAGGERATION = 3;
+
+/**
+ * Change in sun-facing (the cosine against the sun) that maps to the full
+ * relief tint in either direction. Slopes beyond it clip, so a rare crag does
+ * not set the scale for every gentle hillside.
+ */
+const RELIEF_RANGE = 0.6;
 
 export interface TerrainData {
   readonly texture: THREE.DataTexture;
@@ -143,11 +172,56 @@ function computeOpenness(dem: Float32Array, spec: GridSpec): Float32Array {
 }
 
 /**
+ * How much more, or less, each cell faces the sun than flat ground does, with
+ * the relief exaggerated: -1 for a slope turned well away, 0 on the flat, +1
+ * for one turned well towards it.
+ *
+ * Signed and centred on flat ground on purpose. Valley floors and hilltops,
+ * which are most of what the player walks on, come out at exactly zero and
+ * keep the colour they were authored in; only the hillsides move.
+ */
+function computeRelief(dem: Float32Array, spec: GridSpec): Float32Array {
+  const { width, height, cellSize } = spec;
+  const relief = new Float32Array(dem.length);
+
+  const sunLength = Math.hypot(SUN_OFFSET[0], SUN_OFFSET[1], SUN_OFFSET[2]);
+  const sunX = SUN_OFFSET[0] / sunLength;
+  const sunY = SUN_OFFSET[1] / sunLength;
+  const sunZ = SUN_OFFSET[2] / sunLength;
+
+  for (let row = 0; row < height; row++) {
+    const rowUp = Math.max(row - 1, 0);
+    const rowDown = Math.min(row + 1, height - 1);
+    for (let col = 0; col < width; col++) {
+      const colLeft = Math.max(col - 1, 0);
+      const colRight = Math.min(col + 1, width - 1);
+
+      // The same central differences the mesh's normals use (columns run
+      // along world x, rows along z), so the tint lines up with the surface
+      // it is painted on. Divided by the cells actually spanned, which is one
+      // rather than two on the border.
+      const dzdx =
+        ((dem[row * width + colRight] - dem[row * width + colLeft]) /
+          ((colRight - colLeft) * cellSize)) *
+        RELIEF_EXAGGERATION;
+      const dzdz =
+        ((dem[rowDown * width + col] - dem[rowUp * width + col]) /
+          ((rowDown - rowUp) * cellSize)) *
+        RELIEF_EXAGGERATION;
+
+      const facing = (-dzdx * sunX + sunY - dzdz * sunZ) / Math.sqrt(dzdx * dzdx + dzdz * dzdz + 1);
+      relief[row * width + col] = Math.max(-1, Math.min(1, (facing - sunY) / RELIEF_RANGE));
+    }
+  }
+
+  return relief;
+}
+
+/**
  * Bake the shading fields into one texture.
  *
- * R is openness stretched to 0..1, G is wetness. Blue and alpha are unused;
- * a two-channel format would save 128 KB on a texture uploaded once, and cost
- * a reader of this file the question of which two channels those were.
+ * R is openness stretched to 0..1, G is wetness, and B is relief, with 0.5 as
+ * flat ground. Alpha is unused.
  */
 export function bakeTerrainData(
   dem: Float32Array,
@@ -155,6 +229,7 @@ export function bakeTerrainData(
   spec: GridSpec,
 ): TerrainData {
   const openness = computeOpenness(dem, spec);
+  const relief = computeRelief(dem, spec);
 
   const wetStart = Math.log(WET_START_CELLS);
   const wetSpan = Math.log(channelThresholdCells(spec.cellSize)) - wetStart;
@@ -168,6 +243,9 @@ export function bakeTerrainData(
 
     data[cell * 4] = Math.round(shade * 255);
     data[cell * 4 + 1] = Math.round(wetness * 255);
+    // 128 rather than 127.5: flat ground must decode to exactly no tint, and
+    // the shader subtracts 128/255 to match.
+    data[cell * 4 + 2] = Math.round(128 + relief[cell] * 127);
     data[cell * 4 + 3] = 255;
   }
 

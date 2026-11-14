@@ -139,7 +139,21 @@ const AO_INDIRECT = 0.7;
 const AO_DIRECT = 0.32;
 
 /**
- * What both terms fall to under the risk overlay.
+ * What the baked relief multiplies the light by on a slope turned fully
+ * towards the sun, and on one turned fully away.
+ *
+ * A colour shift more than a brightness one. The sunward tint is warm and
+ * barely brighter (lit ground already sits just under 1.0, and there is no
+ * tone mapping to catch what goes over); the far side loses a little light
+ * and a good deal of its red, which lands it in the cool lilac-green of open
+ * shade. So a hillside reads as turning away from the light, not as being in
+ * the dark, and the high-key rule holds.
+ */
+const RELIEF_SUNWARD: [number, number, number] = [1.05, 1.02, 0.9];
+const RELIEF_AWAY: [number, number, number] = [0.8, 0.88, 0.99];
+
+/**
+ * What all three terms fall to under the risk overlay.
  *
  * The overlay is the one layer meant to be read as a number. Shading a hollow
  * darker than a spur lays a second gradient over it that is not risk, and the
@@ -233,7 +247,7 @@ export interface TerrainMaterialOptions {
   /** Per-cover texture weights; see `createCoverPatternTexture`. */
   readonly coverPattern: THREE.Texture;
   readonly overlay: THREE.Texture;
-  /** Sky-view openness in red, wetness in green. See `terrainData.ts`. */
+  /** Sky-view openness in red, wetness in green, relief in blue. See `terrainData.ts`. */
   readonly terrainData: THREE.Texture;
   readonly gradientMap: THREE.Texture;
   readonly curvature: CurvatureUniforms;
@@ -310,6 +324,8 @@ export function createTerrainMaterial(options: TerrainMaterialOptions): TerrainM
         vec4 cwTerrain = texture2D(uTerrainData, vMapUv);
         float cwShade = cwTerrain.r;
         float cwWetness = cwTerrain.g;
+        // Signed: positive on slopes turned towards the sun. 128 is flat.
+        float cwRelief = (cwTerrain.b - ${(128 / 255).toFixed(5)}) * ${(255 / 127).toFixed(5)};
         {
           float cwMottle = cwNoise(cwGround / ${MOTTLE_M.toFixed(2)});
           float cwGrain = cwNoise(cwGround / ${GRAIN_M.toFixed(2)});
@@ -364,7 +380,19 @@ export function createTerrainMaterial(options: TerrainMaterialOptions): TerrainM
         /* glsl */ `
         float cwAoScale = mix(1.0, ${AO_OVERLAY_RELIEF.toFixed(2)}, uOverlayMix);
         reflectedLight.indirectDiffuse *= mix(1.0, cwShade, ${AO_INDIRECT.toFixed(2)} * cwAoScale);
-        reflectedLight.directDiffuse *= mix(1.0, cwShade, ${AO_DIRECT.toFixed(2)} * cwAoScale);`,
+        reflectedLight.directDiffuse *= mix(1.0, cwShade, ${AO_DIRECT.toFixed(2)} * cwAoScale);
+        // Relief on both terms: it stands in for a steeper landscape under the
+        // same sun and sky, and tinting only one would shift the hue of the
+        // other's share.
+        vec3 cwReliefTint = mix(
+          vec3(1.0),
+          cwRelief > 0.0
+            ? vec3(${RELIEF_SUNWARD.map((c) => c.toFixed(3)).join(", ")})
+            : vec3(${RELIEF_AWAY.map((c) => c.toFixed(3)).join(", ")}),
+          min(abs(cwRelief), 1.0) * cwAoScale
+        );
+        reflectedLight.indirectDiffuse *= cwReliefTint;
+        reflectedLight.directDiffuse *= cwReliefTint;`,
       );
   };
 
